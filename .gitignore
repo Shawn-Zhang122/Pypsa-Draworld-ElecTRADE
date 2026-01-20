@@ -9,6 +9,7 @@ __pycache__/
 .venv
 env/
 venv/
+solver/
 
 # PyPSA artifacts
 *.nc
