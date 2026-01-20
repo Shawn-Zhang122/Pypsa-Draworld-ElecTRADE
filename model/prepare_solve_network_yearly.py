@@ -13,7 +13,7 @@ import numpy as np
 import pypsa
 
 from build_fuel_cost import hourly_index, build_marginal_cost
-
+import validation_before_solving as vbs
 
 # =======================
 # CONFIG
@@ -28,7 +28,7 @@ ONWIND_CSV  = "data/inputs/REprofile/ninja_wind_29.0000_120.0000.csv"
 OFFWIND_CSV = "data/inputs/REprofile/ninja_wind_29.0000_120.0000.csv"
 SOLAR_CSV   = "data/inputs/REprofile/ninja_pv_29.0000_120.0000.csv"
 
-OTHERS_SETTING_CSV = "data/raw/others_setting.csv"
+OTHERS_SETTING_CSV = "data/inputs/Others/others_setting.csv"
 
 OUT_PRICE = "results/prices_2025_8760.csv"
 OUT_FLOW  = "results/flows_2025_8760.csv"
@@ -37,11 +37,16 @@ OUT_FLOW  = "results/flows_2025_8760.csv"
 # =======================
 # SOLVER (Linopy)
 # =======================
+
 solver_options = {
     "Threads": 4,
     "TimeLimit": 28800,
     "Presolve": 2,
     "NumericFocus": 2,
+    "DualReductions": 0,
+    "InfUnbdInfo": 1,
+    "Method": 1,      # dual simplex
+    "Crossover": 0,
 }
 
 
@@ -143,14 +148,32 @@ def infer_carrier(row):
 
 
 def efficiency(row, carrier):
-    if "Eff_Up" in row and pd.notna(row["Eff_Up"]):
-        return float(row["Eff_Up"])
-    if "Heat_Rate_MMBTU_per_MWh" in row and pd.notna(row["Heat_Rate_MMBTU_per_MWh"]):
-        return 3.412 / float(row["Heat_Rate_MMBTU_per_MWh"])
-    if carrier == "coal":
-        return 0.35
-    if carrier == "gas":
-        return 0.50
+    carrier = str(carrier).lower()
+
+    # -----------------------
+    # Fossil / thermal only
+    # -----------------------
+    if carrier in {"coal", "gas"}:
+
+        # explicit efficiency provided
+        if "Eff_Up" in row and pd.notna(row["Eff_Up"]):
+            eff = float(row["Eff_Up"])
+            if eff > 0:
+                return eff
+
+        # heat rate (MMBTU/MWh) → efficiency
+        if "Heat_Rate_MMBTU_per_MWh" in row and pd.notna(row["Heat_Rate_MMBTU_per_MWh"]):
+            hr = float(row["Heat_Rate_MMBTU_per_MWh"])
+            if hr > 0:                     # CRITICAL guard
+                return 3.412 / hr
+
+        # fallback defaults
+        return 0.35 if carrier == "coal" else 0.50
+
+    # -----------------------
+    # Non-thermal generators
+    # -----------------------
+    # renewables, nuclear, hydro, storage, etc.
     return 1.0
 
 
@@ -173,6 +196,9 @@ edges["from_node"] = edges["from_node"].map(norm)
 edges["to_node"]   = edges["to_node"].map(norm)
 edges["ac_dc"]     = edges["ac_dc"].str.upper().str.strip()
 
+others = pd.read_csv(OTHERS_SETTING_CSV).set_index("node")
+max_load_mw = others["Max_Load_GW"] * 1e3  # GW -> MW
+
 n = pypsa.Network()
 n.set_snapshots(idx)
 
@@ -187,12 +213,16 @@ for c in sorted(ALL_CARRIERS):
 for b in nodes:
     n.add("Bus", b, carrier=ELECTRICITY_CARRIER)
 
-
 # loads
+load_mw = load.mul(max_load_mw, axis=1)
 for b in nodes:
     n.add("Load", f"load_{b}", bus=b)
-n.loads_t.p_set = load.rename(columns={b: f"load_{b}" for b in nodes})
+n.loads_t.p_set = load_mw.rename(columns={b: f"load_{b}" for b in nodes})
 n.loads_t.p_set = n.loads_t.p_set.fillna(0.0)
+
+print("=== Max load per node (MW) ===")
+print(n.loads_t.p_set.max().sort_values(ascending=False))
+
 
 # -----------------------
 # Inter-node connections
@@ -216,9 +246,11 @@ for i, r in edges.iterrows():
             bus1=r["to_node"],
             p_nom=cap,
             p_min_pu=0.0,
-            efficiency=1.0,
+            efficiency=0.99,
             carrier="dc",
+            marginal_cost = 1e-5
         )
+
     else:
         # AC: bidirectional
         n.add(
@@ -228,11 +260,12 @@ for i, r in edges.iterrows():
             bus1=r["to_node"],
             p_nom=cap,
             p_min_pu=-1.0,
-            efficiency=1.0,
+            efficiency=0.99,
             carrier="ac",
+            marginal_cost = 1e-5,  # small loss penalty to avoid loops   
         )
 
-# -----------------------
+# -----------------------   
 # Generators + Storage
 # -----------------------
 gen = gen.reset_index(drop=False)
@@ -253,8 +286,9 @@ for _, r in gen.iterrows():
     name = f"gen__{rid}"
 
     p_min_pu = 0.0
-    if carrier == "coal" and "Min_Power" in r and pd.notna(r["Min_Power"]):
-        p_min_pu = float(r["Min_Power"])
+    # only applied for UC models, but set here for validation purposes
+    # if carrier == "coal" and "Min_Power" in r and pd.notna(r["Min_Power"]):
+    #     p_min_pu = float(r["Min_Power"])
 
     n.add(
         "Generator",
@@ -357,16 +391,10 @@ for carrier, cf in {
     n.generators_t.p_max_pu.loc[:, gens] = sub.clip(0.0, 1.0)
 
 # =======================
-# MARGINAL COST
+# MARGINAL COST (EXPLICIT)
 # =======================
 
-# ---------- 1) Coal (hourly, node/month specific)
-mc_coal = build_marginal_cost(
-    year=YEAR,
-    others_setting_csv=OTHERS_SETTING_CSV,
-    generators_units=gen,
-)
-
+# initialize MC (all generators, all hours)
 mc = pd.DataFrame(
     0.0,
     index=n.snapshots,
@@ -374,47 +402,67 @@ mc = pd.DataFrame(
     dtype=float
 )
 
-# assign coal MC
-for rid in mc_coal.columns:
-    gname = f"gen__{rid}"
+# -------------------------------------------------
+# 1) COAL: hourly, node/month specific
+# -------------------------------------------------
+gen_coal = gen[gen["carrier"] == "coal"]
+
+mc_coal = build_marginal_cost(
+    year=YEAR,
+    others_setting_csv=OTHERS_SETTING_CSV,
+    generators_units=gen_coal,
+)
+
+# map rid -> generator name
+coal_map = {
+    int(rid): f"gen__{int(rid)}"
+    for rid in gen_coal["index"]
+}
+
+# sanity check
+missing = set(coal_map) - set(mc_coal.columns)
+if missing:
+    raise KeyError(f"Missing coal MC for rids: {sorted(missing)}")
+
+# assign MC
+for rid, gname in coal_map.items():
     if gname in mc.columns:
         mc[gname] = mc_coal[rid].values
 
-
-# ---------- 2) Read Gas & Nuclear prices from others_setting.csv
-others = pd.read_csv(OTHERS_SETTING_CSV).set_index("node")
-
+# -------------------------------------------------
+# 2) GAS: static, node-specific
+# -------------------------------------------------
 gas_price_by_node = others["Gas_Price (RMB/MWh-e)"]
-nuclear_price_by_node = others["Nuclear_Price (RMB/MWh-e)"]
 
-
-# ---------- 3) Gas (static, node-specific)
 for _, r in gen[gen["carrier"] == "gas"].iterrows():
-    rid = int(r["index"])
-    gname = f"gen__{rid}"
+    gname = f"gen__{int(r['index'])}"
     node = r["node"]
 
     if gname in mc.columns:
         mc[gname] = float(gas_price_by_node.loc[node])
 
 
-# ---------- 4) Nuclear (static, node-specific)
+# -------------------------------------------------
+# 3) NUCLEAR: static, node-specific
+# -------------------------------------------------
+nuclear_price_by_node = others["Nuclear_Price (RMB/MWh-e)"]
+
 for _, r in gen[gen["carrier"] == "nuclear"].iterrows():
-    rid = int(r["index"])
-    gname = f"gen__{rid}"
+    gname = f"gen__{int(r['index'])}"
     node = r["node"]
 
     if gname in mc.columns:
         mc[gname] = float(nuclear_price_by_node.loc[node])
 
-
-# ---------- 5) Assign to network
+# -------------------------------------------------
+# 4) ASSIGN TO NETWORK
+# -------------------------------------------------
 n.generators_t.marginal_cost = mc
-
 
 # =======================
 # SOLVE (LINOPY)
-# =======================
+vbs.validation_before_solving(n)
+
 n.optimize(
     solver_name="gurobi",
     solver_options=solver_options,
