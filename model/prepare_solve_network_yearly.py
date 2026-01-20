@@ -98,11 +98,22 @@ def norm(x):
 
 def read_ts(path, idx, nodes):
     df = pd.read_csv(path)
-    t = pd.to_datetime(df["datetime"])
+
+    # force canonical hourly index
+    if len(df) != len(idx):
+        raise ValueError(f"{path}: row count != snapshots")
+
     df = df.drop(columns=["datetime"])
-    df.columns = [norm(c) for c in df.columns]
-    df.index = t
-    df = df.reindex(idx)
+    df.columns = [str(c).strip() for c in df.columns]
+    df.index = idx   # <-- authoritative time index
+
+    missing = set(nodes) - set(df.columns)
+    if missing:
+        raise KeyError(f"{path}: missing nodes {missing}")
+
+    if df.isna().any().any():
+        raise ValueError(f"{path}: NaNs in data")
+
     return df[nodes].astype(float)
 
 
@@ -331,11 +342,19 @@ for carrier, cf in {
     }.items():
 
     gens = n.generators.index[n.generators.carrier == carrier]
-    if len(gens) == 0:
+    if gens.empty:
         continue
-    mat = np.column_stack([cf[n.generators.at[g, "bus"]].values for g in gens])
-    n.generators_t.p_max_pu.loc[:, gens] = mat.clip(0.0, 1.0).fillna(1.0)
 
+    buses = n.generators.loc[gens, "bus"]
+
+    sub = cf[buses.values]
+    sub.columns = gens
+
+    # fail fast
+    if sub.isna().any().any():
+        raise ValueError(f"NaNs in p_max_pu for {carrier}")
+
+    n.generators_t.p_max_pu.loc[:, gens] = sub.clip(0.0, 1.0)
 
 # =======================
 # MARGINAL COST
