@@ -1,0 +1,43 @@
+{
+  "Hebei": {
+    "HEBEI_NORTH": [
+      "Zhangjiakou",
+      "Chengde",
+      "Tangshan",
+      "Qinhuangdao"
+    ],
+    "HEBEI_SOUTH": [
+      "Shijiazhuang",
+      "Handan",
+      "Xingtai",
+      "Baoding",
+      "Cangzhou",
+      "Hengshui",
+      "Langfang"
+    ]
+  },
+
+  "Inner Mongolia": {
+    "NM_EAST": [
+      "HulunBuir",
+      "Hulunbuir",
+      "Hinggan",
+      "Tongliao",
+      "Chifeng",
+      "Cifeng",
+      "Xilingol",
+      "XilinGol",
+      "Xilingol League"
+    ],
+    "NM_WEST": [
+      "Hohhot",
+      "Baotou",
+      "Ordos",
+      "Wuhai",
+      "Bayannur",
+      "Bayannaoer",
+      "Ulanqab",
+      "Alxa"
+    ]
+  }
+}

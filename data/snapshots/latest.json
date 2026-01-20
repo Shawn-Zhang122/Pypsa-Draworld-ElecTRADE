@@ -1,0 +1,8 @@
+{
+  "schema_version": "0.1",
+  "date": "2026-01-09",
+  "model_version": "pypsa-demo",
+  "git_commit": "init",
+  "prices": {},
+  "flows": []
+}

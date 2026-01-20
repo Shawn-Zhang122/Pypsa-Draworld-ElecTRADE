@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# PyPSA artifacts
+*.nc
+*.h5
+*.hdf5
+
+# Solver / temp
+gurobi.log
+*.lp
+*.sol
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Notebooks outputs
+.ipynb_checkpoints/
