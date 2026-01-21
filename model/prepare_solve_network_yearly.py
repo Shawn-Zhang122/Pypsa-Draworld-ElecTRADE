@@ -41,13 +41,21 @@ OUT_FLOW  = "results/flows_2025_8760.csv"
 solver_options = {
     "Threads": 4,
     "TimeLimit": 28800,
-    "Presolve": 2,
-    "NumericFocus": 2,
-    "DualReductions": 0,
+
+    # CORE FIXES
+    "Method": 2,          # barrier
+    "Crossover": 0,       # keep barrier solution
+    "Presolve": 2,        # aggressive presolve
+    "DualReductions": 1,  # IMPORTANT: allow cleanup
+
+    # NUMERICS
+    "NumericFocus": 3,
+    "BarConvTol": 1e-6,
+
+    # SAFETY
     "InfUnbdInfo": 1,
-    "Method": 1,      # dual simplex
-    "Crossover": 0,
 }
+
 
 
 # =======================
@@ -462,6 +470,29 @@ n.generators_t.marginal_cost = mc
 # =======================
 # SOLVE (LINOPY)
 vbs.validation_before_solving(n)
+
+# --- Links (AC/DC)
+n.links["p_nom_extendable"] = False
+n.links["p_nom_min"] = n.links["p_nom"]
+n.links["p_nom_max"] = n.links["p_nom"]
+
+# --- Generators
+n.generators["p_nom_extendable"] = False
+n.generators["p_nom_min"] = n.generators["p_nom"]
+n.generators["p_nom_max"] = n.generators["p_nom"]
+
+# --- Stores
+n.stores["e_nom_extendable"] = False
+n.stores["e_nom_min"] = n.stores["e_nom"]
+n.stores["e_nom_max"] = n.stores["e_nom"]
+
+#Investment cost silienced.
+n.links["capital_cost"] = 0.0
+n.generators["capital_cost"] = 0.0
+n.stores["capital_cost"] = 0.0
+
+#to be used for faster testing and online display/update every week
+#n.set_snapshots(n.snapshots[:168])  # 1 week
 
 n.optimize(
     solver_name="gurobi",

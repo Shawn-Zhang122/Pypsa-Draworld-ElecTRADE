@@ -121,4 +121,7 @@ def validation_before_solving(n):
     print("END PRE-SOLVE VALIDATION")
     print("#" * 80)
 
+    #6. consistnecy check for marginal costs
+    n.consistency_check()
+
 
