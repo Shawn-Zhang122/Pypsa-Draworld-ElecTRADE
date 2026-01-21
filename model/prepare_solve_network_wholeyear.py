@@ -427,15 +427,14 @@ coal_map = {
     for rid in gen_coal["index"]
 }
 
-# sanity check
-missing = set(coal_map) - set(mc_coal.columns)
+#sanity check
+mc_coal_cols = set(map(int, mc_coal.columns))
+missing = set(coal_map) - mc_coal_cols
 if missing:
     raise KeyError(f"Missing coal MC for rids: {sorted(missing)}")
 
-# assign MC
 for rid, gname in coal_map.items():
-    if gname in mc.columns:
-        mc[gname] = mc_coal[rid].values
+    mc[gname] = mc_coal[str(rid)].values
 
 # -------------------------------------------------
 # 2) GAS: static, node-specific
