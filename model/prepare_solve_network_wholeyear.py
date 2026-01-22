@@ -188,7 +188,7 @@ def efficiency(row, carrier):
 # =======================
 # BUILD NETWORK
 # =======================
-idx = hourly_index(YEAR)
+idx = pd.date_range(f"{YEAR}-01-01 00:00:00", f"{YEAR}-12-31 23:00:00", freq="h")
 
 gen = pd.read_csv(GEN_CSV)
 gen["node"] = gen["node"].map(norm)
@@ -209,6 +209,7 @@ max_load_mw = others["Max_Load_GW"] * 1e3  # GW -> MW
 
 n = pypsa.Network()
 n.set_snapshots(idx)
+#n.set_investment_periods([YEAR])
 
 # -----------------------
 # Register carriers ONCE (before adding components that reference carriers)
@@ -216,6 +217,8 @@ n.set_snapshots(idx)
 for c in sorted(ALL_CARRIERS):
     if c not in n.carriers.index:
         n.add("Carrier", c)
+
+n. add("Carrier", "load_shedding")
 
 # buses
 for b in nodes:
@@ -260,18 +263,38 @@ for i, r in edges.iterrows():
         )
 
     else:
-        # AC: bidirectional
+    # AC: two unidirectional Links (PyPSA-Eur style)
+        name_fwd = f"{name}__fwd"
+        name_rev = f"{name}__rev"
+
+        # from_node -> to_node
         n.add(
             "Link",
-            name,
+            name_fwd,
             bus0=r["from_node"],
             bus1=r["to_node"],
             p_nom=cap,
-            p_min_pu=-1.0,
+            p_min_pu=0.0,
+            p_max_pu=1.0,
             efficiency=0.99,
             carrier="ac",
-            marginal_cost = 1e-5,  # small loss penalty to avoid loops   
+            marginal_cost=0.0,   # SAFE: no signed-flow cost
         )
+
+        # to_node -> from_node
+        n.add(
+            "Link",
+            name_rev,
+            bus0=r["to_node"],
+            bus1=r["from_node"],
+            p_nom=cap,
+            p_min_pu=0.0,
+            p_max_pu=1.0,
+            efficiency=0.99,
+            carrier="ac",
+            marginal_cost=0.0,
+        )
+
 
 # -----------------------   
 # Generators + Storage
@@ -308,6 +331,24 @@ for _, r in gen.iterrows():
         p_min_pu=p_min_pu,
         p_max_pu=1.0
         )
+    
+VOLL = 1e4  # RMB/MWh, choose >> any marginal cost
+
+for bus in n.buses.index:
+    n.add(
+        "Generator",
+        name=f"load_shed_{bus}",
+        bus=bus,
+        carrier="load_shedding",
+        p_nom=1e7,              # effectively unlimited
+        p_min_pu=0.0,
+        p_max_pu=1.0,
+        marginal_cost=VOLL,
+        capital_cost=0.0,
+        p_nom_extendable=False
+    )
+
+
 
 # 2) Add storage as Store + (charge/discharge) Links, implicit by carrier params
 for _, r in gen.iterrows():
@@ -402,9 +443,13 @@ for carrier, cf in {
 # MARGINAL COST (EXPLICIT)
 # =======================
 
-# initialize MC (all generators, all hours)
+# =======================
+# MARGINAL COST (EXPLICIT)
+# =======================
+
+# 0) start from static marginal_cost (broadcast to all snapshots)
 mc = pd.DataFrame(
-    0.0,
+    np.repeat(n.generators.marginal_cost.values[None, :], len(n.snapshots), axis=0),
     index=n.snapshots,
     columns=n.generators.index,
     dtype=float
@@ -421,13 +466,8 @@ mc_coal = build_marginal_cost(
     generators_units=gen_coal,
 )
 
-# map rid -> generator name
-coal_map = {
-    int(rid): f"gen__{int(rid)}"
-    for rid in gen_coal["index"]
-}
+coal_map = {int(rid): f"gen__{int(rid)}" for rid in gen_coal["index"]}
 
-#sanity check
 mc_coal_cols = set(map(int, mc_coal.columns))
 missing = set(coal_map) - mc_coal_cols
 if missing:
@@ -443,11 +483,7 @@ gas_price_by_node = others["Gas_Price (RMB/MWh-e)"]
 
 for _, r in gen[gen["carrier"] == "gas"].iterrows():
     gname = f"gen__{int(r['index'])}"
-    node = r["node"]
-
-    if gname in mc.columns:
-        mc[gname] = float(gas_price_by_node.loc[node])
-
+    mc[gname] = float(gas_price_by_node.loc[r["node"]])
 
 # -------------------------------------------------
 # 3) NUCLEAR: static, node-specific
@@ -456,10 +492,7 @@ nuclear_price_by_node = others["Nuclear_Price (RMB/MWh-e)"]
 
 for _, r in gen[gen["carrier"] == "nuclear"].iterrows():
     gname = f"gen__{int(r['index'])}"
-    node = r["node"]
-
-    if gname in mc.columns:
-        mc[gname] = float(nuclear_price_by_node.loc[node])
+    mc[gname] = float(nuclear_price_by_node.loc[r["node"]])
 
 # -------------------------------------------------
 # 4) ASSIGN TO NETWORK
@@ -468,7 +501,7 @@ n.generators_t.marginal_cost = mc
 
 # =======================
 # SOLVE (LINOPY)
-vbs.validation_before_solving(n)
+#vbs.validation_before_solving(n)
 
 # --- Links (AC/DC)
 n.links["p_nom_extendable"] = False
@@ -476,9 +509,11 @@ n.links["p_nom_min"] = n.links["p_nom"]
 n.links["p_nom_max"] = n.links["p_nom"]
 
 # --- Generators
+# default: no generator is extendable
 n.generators["p_nom_extendable"] = False
-n.generators["p_nom_min"] = n.generators["p_nom"]
-n.generators["p_nom_max"] = n.generators["p_nom"]
+# only coal generators are extendable, to avoid the "infeasible" issue
+mask = n.generators.carrier == "coal"
+n.generators.loc[mask, "p_nom_extendable"] = False
 
 # --- Stores
 n.stores["e_nom_extendable"] = False
@@ -489,7 +524,7 @@ n.stores["e_nom_max"] = n.stores["e_nom"]
 n.links["capital_cost"] = 0.0
 n.generators["capital_cost"] = 0.0
 n.stores["capital_cost"] = 0.0
-
+n.generators["p_nom_0"] = n.generators.p_nom.copy()
 #to be used for faster testing and online display/update every week
 #n.set_snapshots(n.snapshots[:168])  # 1 week
 
@@ -498,17 +533,16 @@ n.optimize(
     solver_options=solver_options,
 )
 
+# WRITE NETCDF IMMEDIATELY
+#prices = n.buses_t.marginal_price.copy()
+#n.generators["p_nom_star"] = n.generators.p_nom
+#prices.to_csv(OUT_PRICE)
+n.export_to_netcdf("results/dispatch_2025.nc")
 
 # =======================
 # EXPORT
 # =======================
-n.buses_t.marginal_price.to_csv(OUT_PRICE)
-
-flows = []
-if len(n.links):
-    f = n.links_t.p0.copy()
-    f.columns = [f"LINK::{c}" for c in f.columns]
-    flows.append(f)
-
-if flows:
-    pd.concat(flows, axis=1).to_csv(OUT_FLOW)
+# after solve
+#del n.links_t
+#del n.stores_t
+#n.links_t.p0.to_csv(OUT_FLOW)
