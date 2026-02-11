@@ -1,235 +1,249 @@
 """
-PRICE SETTER CLASSIFICATION LOGIC
-----------------------------------
+Price setter classification from a solved PyPSA NetCDF (no PyPSA import needed).
 
-This script plots the nodal marginal price (LMP) from the solved LP
-and classifies the hourly price-setting mechanism using strict KKT conditions.
+What this does
+--------------
+For a given bus and time window, it:
+1) reads LMP = buses_t.marginal_price (dual of nodal balance),
+2) tests *interior* KKT conditions to infer which variable is marginal:
+   - Local generator dispatch (p in (0, p_max)) with mc ~= LMP
+   - Import link flow (p0 in (0, p_nom)) with correct link KKT
+   - Storage discharge link (p0 in (0, p_nom)) with correct link KKT
+3) exports:
+   - a CSV with hourly setter labels
+   - a scatter plot of price colored by setter
 
-Key principles:
+Key correction vs your draft
+----------------------------
+For a Link with bus0 -> bus1 and efficiency eta, and decision variable p0:
 
-1) Market price
----------------
-The price used in the plot is:
+    bus0 injection:   -p0
+    bus1 injection:   +eta * p0
 
-    lambda_{b,t} = n.buses_t.marginal_price
+Interior KKT (reduced cost = 0) gives:
 
-This is the dual variable of the nodal power balance constraint.
-It is NOT reconstructed from generator marginal costs.
+    marginal_cost - LMP_bus0 + eta * LMP_bus1 = 0
+=>  LMP_bus1 = (LMP_bus0 - marginal_cost) / eta
 
-2) Local generator sets price if:
-----------------------------------
-- Dispatch is interior:
-      0 < p_{i,t} < p_max_{i,t}
-- Marginal cost matches price:
-      |MC_{i,t} - lambda_{b,t}| < eps
+Your draft used: LMP_bus1 = eta * LMP_bus0 + marginal_cost  (wrong sign / scaling)
 
-3) Import sets price if:
--------------------------
-- Flow on incoming link is interior:
-      0 < f_{l,t} < f_max
-- KKT condition holds:
-      lambda_{b,t} = eta_l * lambda_{upstream,t} + link_cost
-
-4) Storage sets price if:
---------------------------
-- Discharge is interior:
-      0 < p_dis,t < p_dis_max
-- Intertemporal KKT holds:
-      lambda_{b,t} = mu_e,t / eta_dis
-
-where mu_e,t is the dual variable of the storage energy balance constraint.
-
-5) Scarcity pricing (VOLL):
----------------------------
-If load shedding is active, price = VOLL.
-
-Notes:
-------
-- Classification is based strictly on LP optimality conditions.
-- No geometric merit-order intersection is used.
-- If no condition matches, price is attributed to other binding constraints.
+Notes / limitations
+-------------------
+- Your NetCDF does NOT store link marginal_cost (it was all zeros in your run),
+  so we assume link marginal_cost = 0.0.
+- Generator marginal_cost can be time-dependent; we use generators_t.marginal_cost if present.
+- If multiple candidates match, we prefer a coal unit when its MC ties with others (your request).
+- If nothing matches strict interior KKT tests, we label "Other" (typically binding bounds / congestion).
 """
 
-import pypsa
+from __future__ import annotations
+import os
+import xarray as xr
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import os
-
-def robust_mc_at_t(n, t, gens):
-    mc = pd.Series(index=gens, dtype=float)
-    if hasattr(n.generators_t, "marginal_cost") and n.generators_t.marginal_cost is not None:
-        mc_df = n.generators_t.marginal_cost
-        common = gens.intersection(mc_df.columns)
-        mc.loc[common] = mc_df.loc[t, common]
-    missing = mc[mc.isna()].index
-    if len(missing):
-        mc.loc[missing] = n.generators.loc[missing, "marginal_cost"]
-    return mc.fillna(0.0)
 
 
-def robust_pmax_at_t(n, t, gens):
-    pmax = pd.Series(1.0, index=gens)
-    if hasattr(n.generators_t, "p_max_pu") and n.generators_t.p_max_pu is not None:
-        pmax_df = n.generators_t.p_max_pu
-        common = gens.intersection(pmax_df.columns)
-        pmax.loc[common] = n.generators_t.p_max_pu.loc[t, common]
-    return pmax
+def _effective_nom(nom: pd.Series, opt: pd.Series) -> pd.Series:
+    nom = nom.astype(float).copy()
+    opt = opt.astype(float)
+    m = opt.notna() & (opt > 0)
+    nom.loc[m] = opt.loc[m]
+    return nom
 
 
-def classify_price_setter(n, t, bus, tol=1e-3, eps=1e-2):
+def classify_price_setter(
+    nc_path: str,
+    bus: str,
+    start: str,
+    end: str,
+    tol: float = 1e-3,
+    eps: float = 1e-2,
+    prefer_carrier: str = "coal",
+) -> pd.DataFrame:
+    ds = xr.open_dataset(nc_path)
+    tindex = pd.to_datetime(ds["snapshots_snapshot"].values)
 
-    lam = float(n.buses_t.marginal_price.loc[t, bus])
+    # Prices
+    lmp = ds["buses_t_marginal_price"].to_pandas()
+    lmp.columns = ds["buses_t_marginal_price_i"].to_pandas()
+    lmp.index = tindex
 
-    # -------------------
-    # 1️⃣ Load shedding
-    # -------------------
-    shed = f"load_shed_{bus}"
-    if shed in n.generators.index:
-        if n.generators_t.p.loc[t, shed] > tol:
-            return "VOLL"
+    # Generators (static)
+    g_bus = ds["generators_bus"].to_pandas()
+    g_car = ds["generators_carrier"].to_pandas()
+    g_nom = ds["generators_p_nom"].to_pandas()
+    g_nom_opt = ds["generators_p_nom_opt"].to_pandas()
+    g_mc_static = ds["generators_marginal_cost"].to_pandas().astype(float)
 
-    # -------------------
-    # 2️⃣ Local generator
-    # -------------------
-    gens = n.generators.index[n.generators.bus == bus]
-    gens = gens[n.generators.loc[gens, "carrier"] != "load_shedding"]
+    # Generators (time series)
+    g_p = ds["generators_t_p"].to_pandas()
+    g_p.columns = ds["generators_t_p_i"].to_pandas()
+    g_p.index = tindex
 
-    if len(gens):
-        p = n.generators_t.p.loc[t, gens]
-        cap = n.generators.loc[gens, "p_nom"]
-        mc = n.generators.loc[gens, "marginal_cost"]
+    g_pmaxpu = None
+    if "generators_t_p_max_pu" in ds:
+        g_pmaxpu = ds["generators_t_p_max_pu"].to_pandas()
+        g_pmaxpu.columns = ds["generators_t_p_max_pu_i"].to_pandas()
+        g_pmaxpu.index = tindex
 
-        interior = (p > tol) & (p < cap - tol)
-        close = (mc - lam).abs() < eps
+    g_mc_tv = None
+    if "generators_t_marginal_cost" in ds:
+        g_mc_tv = ds["generators_t_marginal_cost"].to_pandas()
+        g_mc_tv.columns = ds["generators_t_marginal_cost_i"].to_pandas()
+        g_mc_tv.index = tindex
 
-        if (interior & close).any():
-            return "Local"
+    g_cap = _effective_nom(g_nom, g_nom_opt)
 
-    # -------------------
-    # 3️⃣ Import marginal
-    # -------------------
-    net_links = n.links.index[n.links.carrier.isin(["ac", "dc"])]
-    incoming = n.links.index[(n.links.bus1 == bus) & (n.links.index.isin(net_links))]
+    def gen_mc_at(t, gens):
+        mc = pd.Series(index=gens, dtype=float)
+        if g_mc_tv is not None:
+            common = gens.intersection(g_mc_tv.columns)
+            if len(common):
+                mc.loc[common] = g_mc_tv.loc[t, common]
+        missing = mc[mc.isna()].index
+        if len(missing):
+            mc.loc[missing] = g_mc_static.loc[missing]
+        return mc.fillna(0.0)
 
-    for l in incoming:
-        p0 = float(n.links_t.p0.loc[t,l])
-        cap_l = float(n.links.loc[l,"p_nom"])
+    def gen_pmax_at(t, gens):
+        pmax = pd.Series(1.0, index=gens)
+        if g_pmaxpu is not None:
+            common = gens.intersection(g_pmaxpu.columns)
+            if len(common):
+                pmax.loc[common] = g_pmaxpu.loc[t, common]
+        return pmax
 
-        if p0 > tol and p0 < cap_l - tol:
+    # Links
+    l_bus0 = ds["links_bus0"].to_pandas()
+    l_bus1 = ds["links_bus1"].to_pandas()
+    l_car = ds["links_carrier"].to_pandas()
+    l_eta = ds["links_efficiency"].to_pandas().astype(float)
+    l_nom = ds["links_p_nom"].to_pandas().astype(float)
+    l_nom_opt = ds["links_p_nom_opt"].to_pandas().astype(float)
+    l_cap = _effective_nom(l_nom, l_nom_opt)
 
-            lam0 = float(n.buses_t.marginal_price.loc[t,n.links.loc[l,"bus0"]])
-            eta = float(n.links.loc[l,"efficiency"])
-            cl = float(n.links.loc[l,"marginal_cost"])
+    l_p0 = ds["links_t_p0"].to_pandas()
+    l_p0.columns = ds["links_t_p0_i"].to_pandas()
+    l_p0.index = tindex
 
-            if abs(lam - (eta*lam0 + cl)) < eps:
-                return "Import"
+    # Stores (only for reporting mu_energy; classification is mainly via discharge-link KKT)
+    s_bus = ds["stores_bus"].to_pandas()
+    s_mu = ds["stores_t_mu_energy"].to_pandas()
+    s_mu.columns = ds["stores_t_mu_energy_i"].to_pandas()
+    s_mu.index = tindex
 
-    # -------------------
-    # 4️⃣ Strict storage test (KKT)
-    # -------------------
+    window = lmp.loc[start:end].index
 
-    if not hasattr(n.stores_t, "mu_energy"):
-        return "Storage/Intertemporal (no dual)"
+    def classify_one(t):
+        lam = float(lmp.loc[t, bus])
 
-    # find storage units connected to this bus
-    dis_links = n.links.index[
-        (n.links.bus1 == bus) &
-        (n.links.carrier.astype(str).str.endswith("_discharge"))
-    ]
+        # 0) Load shedding (VOLL), if present
+        gens_bus = g_bus[g_bus == bus].index
+        for g in gens_bus:
+            if str(g_car.loc[g]) in ("load_shedding", "load_shed") or str(g).startswith("load_shed"):
+                if float(g_p.loc[t, g]) > tol:
+                    return ("VOLL", "load_shedding", g, lam)
 
-    for link in dis_links:
+        # 1) Local generator, strict interior KKT
+        if len(gens_bus):
+            p = g_p.loc[t, gens_bus]
+            cap = g_cap.loc[gens_bus] * gen_pmax_at(t, gens_bus)
+            mc = gen_mc_at(t, gens_bus)
 
-        store_bus = n.links.loc[link, "bus0"]
+            interior = (p > tol) & (p < cap - tol)
+            close = (mc - lam).abs() < eps
 
-        # find corresponding store
-        stores = n.stores.index[n.stores.bus == store_bus]
-        if len(stores) == 0:
-            continue
+            cand = gens_bus[interior & close]
+            if len(cand):
+                carriers = g_car.loc[cand].astype(str)
+                if prefer_carrier in carriers.values:
+                    coal_cand = cand[carriers == prefer_carrier]
+                    pick = (mc.loc[coal_cand] - lam).abs().idxmin()
+                else:
+                    pick = (mc.loc[cand] - lam).abs().idxmin()
+                return ("Local", str(g_car.loc[pick]), pick, lam)
 
-        store = stores[0]
+        # 2) Import (ac/dc), strict interior KKT for links
+        # Interior KKT:  marginal_cost - LMP0 + eta*LMP1 = 0
+        # Here link marginal_cost is not stored -> assume 0
+        incoming = l_bus1[(l_bus1 == bus) & (l_car.isin(["ac", "dc"]))].index
+        for link in incoming:
+            cap = float(l_cap.loc[link])
+            if cap <= 0:
+                continue
+            p0 = float(l_p0.loc[t, link])
+            if (p0 > tol) and (p0 < cap - tol):
+                b0 = l_bus0.loc[link]
+                lam0 = float(lmp.loc[t, b0])
+                eta = float(l_eta.loc[link]) if l_eta.loc[link] not in (0, np.nan) else 1.0
 
-        p_dis = float(n.links_t.p0.loc[t, link])
-        cap_dis = float(n.links.loc[link, "p_nom"])
-        eta = float(n.links.loc[link, "efficiency"])
+                lam1_implied = lam0 / eta  # (lam0 - c)/eta, with c=0
+                if abs(lam - lam1_implied) < eps:
+                    return ("Import", "ac/dc", link, lam)
 
-        if p_dis > tol and p_dis < cap_dis - tol:
+        # 3) Storage discharge-link, strict interior KKT
+        dis_links = l_bus1[(l_bus1 == bus) & (l_car.astype(str).str.endswith("_discharge"))].index
+        for link in dis_links:
+            cap = float(l_cap.loc[link])
+            if cap <= 0:
+                continue
+            p0 = float(l_p0.loc[t, link])
+            if (p0 > tol) and (p0 < cap - tol):
+                b0 = l_bus0.loc[link]  # storage bus
+                lam0 = float(lmp.loc[t, b0])
+                eta = float(l_eta.loc[link]) if not pd.isna(l_eta.loc[link]) else 1.0
 
-            mu_e = float(n.stores_t.mu_energy.loc[t, store])
+                # KKT: -LMP0 + eta*LMP1 + c = 0  -> LMP0 = eta*LMP1 + c
+                if abs(lam0 - eta * lam) < eps:
+                    stores = s_bus[s_bus == b0].index
+                    if len(stores):
+                        mu = float(s_mu.loc[t, stores[0]])
+                        return ("Storage", f"mu_energy={mu:.2f}", link, lam)
+                    return ("Storage", "discharge_link", link, lam)
 
-            if abs(lam - mu_e/eta) < eps:
-                return "Storage"
+        return ("Other", "constraint", None, lam)
 
-    # -------------------
-    # 5️⃣ Residual
-    # -------------------
-    return "Other/Constraint"
+    rows = [classify_one(t) for t in window]
+    df = pd.DataFrame(rows, index=window, columns=["setter", "driver", "asset", "price"])
+    return df
 
-def plot_price_with_setters(
-    nc_path,
-    bus,
-    start,
-    end,
-    save=True,
-    out_dir="results"
-):
 
-    n = pypsa.Network(nc_path)
-
-    T = n.snapshots[(n.snapshots >= pd.Timestamp(start)) &
-                    (n.snapshots <= pd.Timestamp(end))]
-
-    price = n.buses_t.marginal_price.loc[T, bus]
-
-    setters = []
-    for t in T:
-        setters.append(classify_price_setter(n, t, bus))
-
-    df = pd.DataFrame({
-        "price": price,
-        "setter": setters
-    }, index=T)
-
-    # color mapping
-    color_map = {
+def plot_setters(df: pd.DataFrame, title: str, out_png: str) -> None:
+    colors = {
         "Local": "tab:blue",
         "Import": "tab:green",
-        "Import-Cong": "tab:orange",
+        "Storage": "tab:purple",
         "VOLL": "tab:red",
-        "Storage/Intertemporal": "tab:purple"
+        "Other": "tab:gray",
     }
-
-    fig, ax = plt.subplots(figsize=(14,6))
-
-    for setter, group in df.groupby("setter"):
-        ax.scatter(group.index,
-                   group.price,
-                   color=color_map.get(setter,"black"),
-                   label=setter,
-                   s=10)
-
-    ax.plot(df.index, df.price, color="black", alpha=0.3)
+    fig, ax = plt.subplots(figsize=(14, 4.8))
+    for k, g in df.groupby("setter"):
+        ax.scatter(g.index, g["price"], s=10, label=k, color=colors.get(k, "black"))
+    ax.plot(df.index, df["price"], alpha=0.25)
 
     ax.set_ylabel("RMB/MWh")
-    ax.set_title(f"Nodal price and price setters – {bus}")
-    ax.legend(frameon=False, ncol=3)
-    plt.tight_layout()
-
-    if save:
-        os.makedirs(out_dir, exist_ok=True)
-        fname = f"price_setter_{bus}_{start}_{end}.png"
-        path = os.path.join(out_dir, fname)
-        plt.savefig(path, dpi=300)
-        plt.close()
-        print("Saved:", path)
-    else:
-        plt.show()
+    ax.set_title(title)
+    ax.legend(frameon=False, ncol=5)
+    fig.tight_layout()
+    fig.savefig(out_png, dpi=200)
+    plt.close(fig)
 
 
 if __name__ == "__main__":
-    plot_price_with_setters(
-        nc_path="results/dispatch_2025.nc",
-        bus="Guangdong",
-        start="2025-07-15 00:00:00",
-        end="2025-07-21 23:00:00"
-    )
+    nc = "results/China_33nodes_dispatch_2025.nc"
+    bus = "Guangdong"
+    start = "2025-07-15 00:00:00"
+    end = "2025-07-21 23:00:00"
+
+    df = classify_price_setter(nc, bus, start, end, tol=1e-3, eps=1e-2, prefer_carrier="coal")
+
+    os.makedirs("results_price_setter", exist_ok=True)
+    out_csv = os.path.join("results", f"price_setter_{bus}_{start[:10]}_{end[:10]}.csv")
+    out_png = os.path.join("results", f"price_setter_{bus}_{start[:10]}_{end[:10]}.png")
+
+    df.to_csv(out_csv)
+    plot_setters(df, f"Nodal price & inferred price setter ({bus})", out_png)
+
+    print("Saved:", out_csv)
+    print("Saved:", out_png)

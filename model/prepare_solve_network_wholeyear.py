@@ -2,7 +2,68 @@
 Annual economic dispatch (LP), 8760 hours, 33 nodes
 - PyPSA + Linopy backend
 - Coal marginal cost computed on-the-fly via build_fuel_cost.py
-- OFFWIND != ONWIND
+- OFFWIND != ONWIND# 2) Add storage as Store + (charge/discharge) Links, implicit by carrier params
+for _, r in gen.iterrows():
+    carrier = r["carrier"]
+    if carrier not in STORAGE_TECH:
+        continue
+
+    node = r["node"]
+    p_nom = float(r["Existing_Cap_MW"])
+    if p_nom <= 0:
+        continue
+
+    params = STORAGE_TECH[carrier]
+    hours = params["hours"]
+    eta_c = params["eta_chg"]
+    eta_d = params["eta_dis"]
+
+    e_nom = p_nom * hours
+
+    rid = int(r["index"])
+    # storage energy must live on a BUS (Links connect buses, not Stores)
+    s_bus   = f"{node}__{carrier}__bus__{rid}"
+    s_store = f"{node}__{carrier}__store__{rid}"
+    s_chg   = f"{node}__{carrier}__chg__{rid}"
+    s_dis   = f"{node}__{carrier}__dis__{rid}"
+
+    # storage bus
+    n.add("Bus", s_bus, carrier=carrier)
+
+    # energy store (MWh)
+    n.add(
+        "Store",
+        s_store,
+        bus=s_bus,
+        e_nom=e_nom,
+        e_initial=0.5 * e_nom,
+        e_cyclic=True,
+        carrier=carrier,
+    )
+
+    # charging: grid(node) -> storage bus
+    n.add(
+        "Link",
+        s_chg,
+        bus0=node,
+        bus1=s_bus,
+        p_nom=p_nom,
+        p_min_pu=0.0,
+        efficiency=eta_c,
+        carrier=f"{carrier}_charge",
+    )
+
+    # discharging: storage bus -> grid(node)
+    n.add(
+        "Link",
+        s_dis,
+        bus0=s_bus,
+        bus1=node,
+        p_nom=p_nom,
+        p_min_pu=0.0,
+        efficiency=eta_d,
+        carrier=f"{carrier}_discharge",
+    )
 - RE profiles already node-specific (no broadcasting)
 - Storage modeled as Store + (charge/discharge) Links with fixed durations:
     battery = 2.3h, pumped hydro = 8h
@@ -65,7 +126,7 @@ solver_options = {
 # =======================
 STORAGE_TECH = {
     "battery": {"hours": 2.3, "eta_chg": 0.95, "eta_dis": 0.95},
-    "pumped":  {"hours": 8.0, "eta_chg": 0.90, "eta_dis": 0.90},
+    "pumped":  {"hours": 8.0, "eta_chg": 0.90, "eta_dis": 0.80},
 }
 
 
@@ -185,6 +246,17 @@ def efficiency(row, carrier):
     # -----------------------
     # renewables, nuclear, hydro, storage, etc.
     return 1.0
+
+def export_dual(n, constraint_name, snapshots, assets):
+    da = n.model.dual[constraint_name]
+
+    df = (
+        da.to_series()
+          .unstack("name")
+          .reindex(index=snapshots)
+          .reindex(columns=assets)
+    )
+    return df
 
 
 # =======================
@@ -539,13 +611,13 @@ n.optimize(
 #prices = n.buses_t.marginal_price.copy()
 #n.generators["p_nom_star"] = n.generators.p_nom
 #prices.to_csv(OUT_PRICE)
-mu = n.model.dual["Store-energy_balance"]
-mu_df = mu.to_pandas()
-
-mu_df.index = n.snapshots
-mu_df.columns = n.stores.index
-
-n.stores_t["mu_energy"] = mu_df
+# --- Store energy balance dual ---
+n.stores_t["mu_energy"] = export_dual(
+    n,
+    "Store-energy_balance",
+    n.snapshots,
+    n.stores.index
+)
 
 n.export_to_netcdf("results/China_33nodes_dispatch_2025.nc")
 
