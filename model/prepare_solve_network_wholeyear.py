@@ -12,6 +12,8 @@ import pandas as pd
 import numpy as np
 import pypsa
 
+pd.options.mode.string_storage = "python"
+
 from build_fuel_cost import hourly_index, build_marginal_cost
 import validation_before_solving as vbs
 
@@ -204,7 +206,10 @@ edges["from_node"] = edges["from_node"].map(norm)
 edges["to_node"]   = edges["to_node"].map(norm)
 edges["ac_dc"]     = edges["ac_dc"].str.upper().str.strip()
 
-others = pd.read_csv(OTHERS_SETTING_CSV).set_index("node")
+others = pd.read_csv(OTHERS_SETTING_CSV)
+#others["node"] = others["node"].map(norm)
+others = others.set_index("node")
+
 max_load_mw = others["Max_Load_GW"] * 1e3  # GW -> MW
 
 n = pypsa.Network()
@@ -218,7 +223,8 @@ for c in sorted(ALL_CARRIERS):
     if c not in n.carriers.index:
         n.add("Carrier", c)
 
-n. add("Carrier", "load_shedding")
+if "load_shedding" not in n.carriers.index:
+    n.add("Carrier", "load_shedding")
 
 # buses
 for b in nodes:
@@ -259,7 +265,7 @@ for i, r in edges.iterrows():
             p_min_pu=0.0,
             efficiency=0.99,
             carrier="dc",
-            marginal_cost = 1e-5
+            marginal_cost = 0.0 
         )
 
     else:
@@ -443,10 +449,6 @@ for carrier, cf in {
 # MARGINAL COST (EXPLICIT)
 # =======================
 
-# =======================
-# MARGINAL COST (EXPLICIT)
-# =======================
-
 # 0) start from static marginal_cost (broadcast to all snapshots)
 mc = pd.DataFrame(
     np.repeat(n.generators.marginal_cost.values[None, :], len(n.snapshots), axis=0),
@@ -537,7 +539,15 @@ n.optimize(
 #prices = n.buses_t.marginal_price.copy()
 #n.generators["p_nom_star"] = n.generators.p_nom
 #prices.to_csv(OUT_PRICE)
-n.export_to_netcdf("results/dispatch_2025.nc")
+mu = n.model.dual["Store-energy_balance"]
+mu_df = mu.to_pandas()
+
+mu_df.index = n.snapshots
+mu_df.columns = n.stores.index
+
+n.stores_t["mu_energy"] = mu_df
+
+n.export_to_netcdf("results/China_33nodes_dispatch_2025.nc")
 
 # =======================
 # EXPORT

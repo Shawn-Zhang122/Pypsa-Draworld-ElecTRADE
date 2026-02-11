@@ -1,0 +1,56 @@
+{
+  "NorthChina": {
+    "Beijing": ["Beijing"],
+    "Tianjin": ["Tianjin"],
+    "Hebei": ["HEBEI_NORTH", "HEBEI_SOUTH"],
+    "Shanxi": ["Shanxi"],
+    "Shandong": ["Shandong"]
+  },
+
+  "EastChina": {
+    "Shanghai": ["Shanghai"],
+    "Jiangsu": ["Jiangsu"],
+    "Zhejiang": ["Zhejiang"],
+    "Anhui": ["Anhui"],
+    "Fujian": ["Fujian"],
+    "Jiangxi": ["Jiangxi"]
+  },
+
+  "MiddleChina": {
+    "Henan": ["Henan"],
+    "Hubei": ["Hubei"],
+    "Hunan": ["Hunan"]
+  },
+
+  "SouthernGrid": {
+    "Guangdong": ["Guangdong"],
+    "Guangxi": ["Guangxi"],
+    "Hainan": ["Hainan"],
+    "Guizhou": ["Guizhou"],
+    "Yunnan": ["Yunnan"]
+  },
+
+  "NortheastChina": {
+    "Liaoning": ["Liaoning"],
+    "Jilin": ["Jilin"],
+    "Heilongjiang": ["Heilongjiang"]
+  },
+
+  "NorthwestChina": {
+    "Shaanxi": ["Shaanxi"],
+    "Gansu": ["Gansu"],
+    "Qinghai": ["Qinghai"],
+    "Ningxia": ["Ningxia"],
+    "Xinjiang": ["Xinjiang"],
+    "Tibet": ["Tibet"]
+  },
+
+  "Changyu": {
+    "Chongqing": ["Chongqing"],
+    "Sichuan": ["Sichuan"]
+  },
+
+  "Neimenggu": {
+    "Inner Mongolia": ["NM_EAST", "NM_WEST"]
+  }
+}

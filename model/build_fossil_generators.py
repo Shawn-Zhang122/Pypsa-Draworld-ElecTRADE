@@ -45,7 +45,7 @@ FOSSIL_SYNTH_DEFAULTS = {
 }
 
 CANON_COLS = [
-    "region_grid","province","Zone","node","Resource","technology","cluster","R_ID",
+    "region_grid","province","node","Resource","technology","cluster","R_ID",
     "COAL","GAS","NUCLEAR","HYDRO","ONWIND","OFFWIND","SOLAR","PUMPED","BATTERY","OTHER",
     "Commit",
     "Existing_Cap_MW","num_units","unmodified_existing_cap_mw","Cap_Size",
@@ -428,7 +428,7 @@ def main():
     )
     ap.add_argument(
         "--mapping_json",
-        default="config/region_province_zone_node_33.json"
+        default="config/region_province_node_33.json"
     )
     ap.add_argument(
         "--target_date",
