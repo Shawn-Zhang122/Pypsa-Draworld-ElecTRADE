@@ -7,7 +7,6 @@
 import pandas as pd
 import numpy as np
 
-
 def _num(x):
     return pd.to_numeric(x, errors="coerce")
 
