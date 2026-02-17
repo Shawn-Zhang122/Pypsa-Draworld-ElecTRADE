@@ -1,20 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>China ElecTRADE Daily Market</title>
+
+    <!-- External Libraries -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: #f4f6f9;
+        }
+
+        h2 {
+            margin-top: 50px;
+        }
+
+        #priceChart, #socChart {
+            width: 100%;
+            height: 600px;
+        }
+
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>China ElecTRADE — Daily Results</h1>
+
+<h2>Hourly Nodal Prices</h2>
+<div id="priceChart"></div>
+
+<h2>Final Storage SOC</h2>
+<div id="socChart"></div>
+
+<div id="error" class="error"></div>
+
 <script>
 
-// Load index.json first
-fetch("data/index.json")
-.then(response => response.json())
+console.log("ElecTRADE site initialized");
+
+// Cache-busting to avoid GitHub Pages CDN cache
+const cacheBuster = "?v=" + new Date().getTime();
+
+// Load index.json
+fetch("data/index.json" + cacheBuster)
+.then(response => {
+    if (!response.ok) {
+        throw new Error("index.json not found");
+    }
+    return response.json();
+})
 .then(config => {
 
-    // Sort files descending (latest first)
-    const priceFiles = config.price_files.sort().reverse();
-    const latestPrice = priceFiles[0];
+    console.log("Index loaded:", config);
 
-    // Load latest price CSV
-    d3.csv("data/prices/" + latestPrice).then(function(data) {
+    if (!config.price_files || config.price_files.length === 0) {
+        throw new Error("No price files found in index.json");
+    }
+
+    // Get latest price file
+    const latestPrice = config.price_files.sort().reverse()[0];
+
+    console.log("Latest price file:", latestPrice);
+
+    // ==========================
+    // Load price CSV
+    // ==========================
+    return d3.csv("data/prices/" + latestPrice + cacheBuster)
+    .then(data => {
+
+        if (!data || data.length === 0) {
+            throw new Error("Price CSV empty");
+        }
 
         const timestamps = data.map(d => d.snapshot);
         const columns = Object.keys(data[0]);
 
+        // Keep only provincial price columns
         const provinces = columns.filter(c =>
             c !== "snapshot" && !c.includes("__")
         );
@@ -27,15 +96,26 @@ fetch("data/index.json")
         }));
 
         Plotly.newPlot("priceChart", traces, {
-            title: latestPrice,
+            title: "Prices — " + latestPrice,
             xaxis: { title: "Time" },
             yaxis: { title: "Price (€/MWh)" }
         });
 
+        return config;  // pass forward
     });
 
-    // Load SOC file
-    d3.csv("data/" + config.soc_file).then(function(data) {
+})
+.then(config => {
+
+    // ==========================
+    // Load SOC CSV
+    // ==========================
+    return d3.csv("data/" + config.soc_file + cacheBuster)
+    .then(data => {
+
+        if (!data || data.length === 0) {
+            throw new Error("SOC CSV empty");
+        }
 
         const names = data.map(d => d.name);
         const values = data.map(d => +Object.values(d)[1]);
@@ -45,12 +125,21 @@ fetch("data/index.json")
             y: values,
             type: "bar"
         }], {
+            title: "Final Storage SOC",
             xaxis: { title: "Storage Unit" },
-            yaxis: { title: "Final SOC (MWh)" }
+            yaxis: { title: "Energy (MWh)" }
         });
 
     });
 
+})
+.catch(error => {
+    console.error("ERROR:", error);
+    document.getElementById("error").innerText =
+        "Error loading data: " + error.message;
 });
 
 </script>
+
+</body>
+</html>
