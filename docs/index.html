@@ -1,79 +1,56 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>China ElecTRADE Daily Prices</title>
-
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-
-    <style>
-        body { font-family: Arial; margin: 40px; }
-        #priceChart { width: 100%; height: 600px; }
-        #socChart { width: 100%; height: 600px; margin-top: 60px; }
-    </style>
-</head>
-<body>
-
-<h2>Hourly Nodal Prices</h2>
-<div id="priceChart"></div>
-
-<h2>Final Storage SOC</h2>
-<div id="socChart"></div>
-
 <script>
 
-// ======================
-// LOAD PRICE CSV
-// ======================
+// Load index.json first
+fetch("data/index.json")
+.then(response => response.json())
+.then(config => {
 
-d3.csv("2025-02-18.csv").then(function(data) {
+    // Sort files descending (latest first)
+    const priceFiles = config.price_files.sort().reverse();
+    const latestPrice = priceFiles[0];
 
-    const timestamps = data.map(d => d.snapshot);
+    // Load latest price CSV
+    d3.csv("data/" + latestPrice).then(function(data) {
 
-    const columns = Object.keys(data[0]);
+        const timestamps = data.map(d => d.snapshot);
+        const columns = Object.keys(data[0]);
 
-    // Only keep provincial price columns (exclude storage buses)
-    const provinces = columns.filter(c =>
-        c !== "snapshot" && !c.includes("__")
-    );
+        const provinces = columns.filter(c =>
+            c !== "snapshot" && !c.includes("__")
+        );
 
-    const traces = provinces.map(zone => ({
-        x: timestamps,
-        y: data.map(d => +d[zone]),
-        mode: "lines",
-        name: zone
-    }));
+        const traces = provinces.map(zone => ({
+            x: timestamps,
+            y: data.map(d => +d[zone]),
+            mode: "lines",
+            name: zone
+        }));
 
-    Plotly.newPlot("priceChart", traces, {
-        xaxis: { title: "Time" },
-        yaxis: { title: "Price (€/MWh)" }
+        Plotly.newPlot("priceChart", traces, {
+            title: latestPrice,
+            xaxis: { title: "Time" },
+            yaxis: { title: "Price (€/MWh)" }
+        });
+
     });
 
-});
+    // Load SOC file
+    d3.csv("data/" + config.soc_file).then(function(data) {
 
+        const names = data.map(d => d.name);
+        const values = data.map(d => +Object.values(d)[1]);
 
-// ======================
-// LOAD SOC CSV
-// ======================
+        Plotly.newPlot("socChart", [{
+            x: names,
+            y: values,
+            type: "bar"
+        }], {
+            xaxis: { title: "Storage Unit" },
+            yaxis: { title: "Final SOC (MWh)" }
+        });
 
-d3.csv("last_soc.csv").then(function(data) {
-
-    const names = data.map(d => d.name);
-    const values = data.map(d => +Object.values(d)[1]);
-
-    Plotly.newPlot("socChart", [{
-        x: names,
-        y: values,
-        type: "bar"
-    }], {
-        xaxis: { title: "Storage Unit" },
-        yaxis: { title: "Final SOC (MWh)" }
     });
 
 });
 
 </script>
-
-</body>
-</html>
