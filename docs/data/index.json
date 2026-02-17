@@ -1,16 +1,7 @@
-import json
-import os
-
-data_dir = "docs/data"
-files = sorted(
-    f for f in os.listdir("docs/data/prices")
-    if f.endswith(".csv") and f.startswith("2025")
-)
-
-index_data = {
-    "price_files": files,
-    "soc_file": "last_soc.csv"
+{
+  "price_files": [
+    "2025-02-13.csv",
+    "2025-02-18.csv"
+  ],
+  "soc_file": "last_soc.csv"
 }
-
-with open("docs/data/index.json", "w") as f:
-    json.dump(index_data, f, indent=2)
