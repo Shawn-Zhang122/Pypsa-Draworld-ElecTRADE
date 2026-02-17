@@ -10,7 +10,7 @@ fetch("data/index.json")
     const latestPrice = priceFiles[0];
 
     // Load latest price CSV
-    d3.csv("data/prices" + latestPrice).then(function(data) {
+    d3.csv("data/prices/" + latestPrice).then(function(data) {
 
         const timestamps = data.map(d => d.snapshot);
         const columns = Object.keys(data[0]);
