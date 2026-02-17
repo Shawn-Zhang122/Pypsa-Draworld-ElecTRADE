@@ -1,13 +1,16 @@
 import json
 import os
 
-data_dir = "docs/data/prices"
-files = sorted(f for f in os.listdir(data_dir) if f.endswith(".csv") and f.startswith("2025"))
+data_dir = "docs/data"
+files = sorted(
+    f for f in os.listdir("docs/data/prices")
+    if f.endswith(".csv") and f.startswith("2025")
+)
 
 index_data = {
     "price_files": files,
     "soc_file": "last_soc.csv"
 }
 
-with open(os.path.join(data_dir, "index.json"), "w") as f:
+with open("docs/data/index.json", "w") as f:
     json.dump(index_data, f, indent=2)
