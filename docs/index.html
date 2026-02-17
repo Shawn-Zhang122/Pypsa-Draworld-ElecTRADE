@@ -11,9 +11,10 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 40px;
-            background: #f4f6f9;
+            margin: 20px auto;
+            max-width: 1600px;   /* increase this */
         }
+
 
         h2 {
             margin-top: 50px;
@@ -80,7 +81,10 @@ fetch("data/index.json" + cacheBuster)
             throw new Error("Price CSV empty");
         }
 
-        const timestamps = data.map(d => d.snapshot);
+  
+        const snapshotKey = Object.keys(data[0])[0];
+        const timestamps = data.map(d => d[snapshotKey]);
+
         const columns = Object.keys(data[0]);
 
         // Keep only provincial price columns
