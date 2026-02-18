@@ -59,13 +59,13 @@ const cacheBuster = "?v=" + new Date().getTime();
 let globalGeo;
 let mapInstance;
 
-fetch("data/index.json" + cacheBuster)
+fetch("out/index.json" + cacheBuster)
 .then(r => r.json())
 .then(config => {
 
     const latestPrice = config.price_files.sort().reverse()[0];
 
-    return d3.csv("data/prices/" + latestPrice + cacheBuster)
+    return d3.csv("out/prices/" + latestPrice + cacheBuster)
     .then(data => {
 
         const columns = Object.keys(data[0]);
@@ -91,7 +91,7 @@ fetch("data/index.json" + cacheBuster)
 })
 .then(config => {
 
-    return d3.csv("data/" + config.soc_file + cacheBuster)
+    return d3.csv("out/" + config.soc_file + cacheBuster)
     .then(data => {
 
         const names = data.map(d => d.name);

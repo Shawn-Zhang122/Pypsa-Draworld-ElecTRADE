@@ -1,0 +1,7 @@
+{
+  "price_files": [
+    "2025-02-13.csv",
+    "2025-02-18.csv"
+  ],
+  "soc_file": "last_soc.csv"
+}
