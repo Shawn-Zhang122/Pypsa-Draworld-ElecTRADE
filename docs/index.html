@@ -55,47 +55,43 @@ h2 { margin-top: 40px; }
 <script>
 
 const cacheBuster = "?v=" + new Date().getTime();
-
-let globalGeo;
 let mapInstance;
+let hoverPopup;
 
-fetch("out/index.json" + cacheBuster)
-.then(r => r.json())
-.then(config => {
+async function loadApp() {
 
-    const latestPrice = config.price_files.sort().reverse()[0];
+    try {
 
-    return d3.csv("out/prices/" + latestPrice + cacheBuster)
-    .then(data => {
+        const configRes = await fetch("out/index.json" + cacheBuster);
+        if (!configRes.ok) throw new Error("Cannot load index.json");
+        const config = await configRes.json();
 
-        const columns = Object.keys(data[0]);
+        const latestPrice = config.price_files.sort().reverse()[0];
+
+        const priceData = await d3.csv("out/prices/" + latestPrice + cacheBuster);
+
+        const columns = Object.keys(priceData[0]);
         const provinces = columns.filter(c =>
             c !== "snapshot" && !c.includes("__")
         );
 
-        const timestamps = data.map(d => d.snapshot);
+        const timestamps = priceData.map(d => d.snapshot);
 
         // Compute 24h average
         let avgPrice = {};
         provinces.forEach(zone => {
-            const vals = data.map(d => +d[zone]);
+            const vals = priceData.map(d => +d[zone]);
             avgPrice[zone] =
                 vals.reduce((a,b)=>a+b,0) / vals.length;
         });
 
-        initMap(avgPrice, provinces, data, timestamps);
+        initMap(avgPrice, provinces, priceData, timestamps);
 
-        return config;
-    });
+        // Load SOC
+        const socData = await d3.csv("out/" + config.soc_file + cacheBuster);
 
-})
-.then(config => {
-
-    return d3.csv("out/" + config.soc_file + cacheBuster)
-    .then(data => {
-
-        const names = data.map(d => d.name);
-        const values = data.map(d => +Object.values(d)[1]);
+        const names = socData.map(d => d.name);
+        const values = socData.map(d => +Object.values(d)[1]);
 
         Plotly.newPlot("socChart", [{
             x: names,
@@ -106,13 +102,12 @@ fetch("out/index.json" + cacheBuster)
             xaxis: { title: "Storage Unit" },
             yaxis: { title: "Energy (MWh)" }
         });
-    });
 
-})
-.catch(error => {
-    document.getElementById("error").innerText =
-        "Error loading data: " + error.message;
-});
+    } catch (err) {
+        document.getElementById("error").innerText =
+            "Error loading data: " + err.message;
+    }
+}
 
 function initMap(avgPrice, provinces, data, timestamps) {
 
@@ -131,71 +126,80 @@ function initMap(avgPrice, provinces, data, timestamps) {
         zoom: 4
     });
 
-    mapInstance.on('load', () => {
+    mapInstance.on('load', async () => {
 
-        fetch("geo/china_33nodes.geojson")
-        .then(r => r.json())
-        .then(geo => {
+        const geoRes = await fetch("geo/china_33nodes.geojson" + cacheBuster);
+        if (!geoRes.ok) {
+            document.getElementById("error").innerText =
+                "Cannot load geojson";
+            return;
+        }
 
-            globalGeo = geo;
+        const geo = await geoRes.json();
 
-            globalGeo.features.forEach(f => {
-                const name = f.properties.name;
-                f.properties.price = avgPrice[name] || 0;
-            });
+        geo.features.forEach(f => {
+            const name = f.properties.name;
+            f.properties.price = avgPrice[name] || 0;
+        });
 
-            mapInstance.addSource('provinces', {
-                type: 'geojson',
-                data: globalGeo
-            });
+        mapInstance.addSource('provinces', {
+            type: 'geojson',
+            data: geo
+        });
 
-            mapInstance.addLayer({
-                id: 'province-fill',
-                type: 'fill',
-                source: 'provinces',
-                paint: {
-                    'fill-color': [
-                        'interpolate',
-                        ['linear'],
-                        ['get', 'price'],
-                        0, '#2166ac',
-                        200, '#f7f7f7',
-                        400, '#b2182b'
-                    ],
-                    'fill-opacity': 0.85
-                }
-            });
+        mapInstance.addLayer({
+            id: 'province-fill',
+            type: 'fill',
+            source: 'provinces',
+            paint: {
+                'fill-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'price'],
+                    0, '#2166ac',
+                    200, '#f7f7f7',
+                    400, '#b2182b'
+                ],
+                'fill-opacity': 0.85
+            }
+        });
 
-            mapInstance.addLayer({
-                id: 'province-border',
-                type: 'line',
-                source: 'provinces',
-                paint: {
-                    'line-color': '#444',
-                    'line-width': 1
-                }
-            });
+        mapInstance.addLayer({
+            id: 'province-border',
+            type: 'line',
+            source: 'provinces',
+            paint: {
+                'line-color': '#444',
+                'line-width': 1
+            }
+        });
 
-            mapInstance.on('click', 'province-fill', e => {
+        hoverPopup = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false
+        });
 
-                const zone = e.features[0].properties.name;
-                showProvinceCurve(zone, data, timestamps);
-            });
+        mapInstance.on('mousemove', 'province-fill', e => {
+            const p = e.features[0].properties;
 
-            mapInstance.on('mousemove', 'province-fill', e => {
-                const p = e.features[0].properties;
-                mapInstance.getCanvas().style.cursor = 'pointer';
+            mapInstance.getCanvas().style.cursor = 'pointer';
 
-                new maplibregl.Popup({
-                    closeButton: false,
-                    closeOnClick: false
-                })
+            hoverPopup
                 .setLngLat(e.lngLat)
                 .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(1)}`)
                 .addTo(mapInstance);
-            });
-
         });
+
+        mapInstance.on('mouseleave', 'province-fill', () => {
+            mapInstance.getCanvas().style.cursor = '';
+            hoverPopup.remove();
+        });
+
+        mapInstance.on('click', 'province-fill', e => {
+            const zone = e.features[0].properties.name;
+            showProvinceCurve(zone, data, timestamps);
+        });
+
     });
 }
 
@@ -217,6 +221,8 @@ function showProvinceCurve(zone, data, timestamps) {
     document.getElementById("curveTitle").innerText =
         "Hourly Price — " + zone;
 }
+
+loadApp();
 
 </script>
 
