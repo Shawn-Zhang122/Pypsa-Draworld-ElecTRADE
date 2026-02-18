@@ -1,0 +1,37 @@
+"Hebei": {
+  "HEBEI_NORTH": [
+    "张家口市",
+    "承德市",
+    "唐山市",
+    "秦皇岛市"
+  ],
+  "HEBEI_SOUTH": [
+    "石家庄市",
+    "邯郸市",
+    "邢台市",
+    "保定市",
+    "沧州市",
+    "廊坊市",
+    "衡水市"
+  ]
+}
+
+"Inner Mongolia": {
+  "NM_EAST": [
+    "海拉尔市",    // 呼伦贝尔市 (Hulunbuir)
+    "乌兰浩特市",  // 兴安盟 (Hinggan League)
+    "通辽市",      // 通辽市 (Tongliao)
+    "赤峰市",      // 赤峰市 (Chifeng)
+    "锡林浩特市"   // 锡林郭勒盟 (Xilingol League)
+  ],
+  "NM_WEST": [
+    "呼和浩特市",  // 呼和浩特市 (Hohhot)
+    "包头市",      // 包头市 (Baotou)
+    "东胜市",      // 鄂尔多斯市 (Ordos)
+    "乌海市",      // 乌海市 (Wuhai)
+    "临河市",      // 巴彦淖尔市 (Bayannur)
+    "集宁市",      // 乌兰察布市 (Ulanqab)
+    "阿拉善左旗"   // 阿拉善盟 (Alxa League)
+  ]
+}
+

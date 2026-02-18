@@ -64,8 +64,8 @@ solver_options = {
 # Ensure output directories exist
 # ============================================================
 
-os.makedirs("docs/data/prices", exist_ok=True)
-os.makedirs("docs/data/flows", exist_ok=True)
+os.makedirs("docs/out/prices", exist_ok=True)
+os.makedirs("docs/out/flows", exist_ok=True)
 
 # ============================================================
 # Determine delivery day (China time)
@@ -119,7 +119,7 @@ n.set_snapshots(snapshots)
 # Carry storage SOC from previous day if exists
 # ============================================================
 
-soc_file = "docs/data/last_soc.csv"
+soc_file = "docs/out/last_soc.csv"
 
 if os.path.exists(soc_file):
     soc_state = pd.read_csv(soc_file, index_col=0).squeeze()
@@ -149,8 +149,8 @@ flow_pub = n.links_t.p0.iloc[:PUBLISH_HOURS] if len(n.links) else None
 
 date_str = delivery_day.strftime("%Y-%m-%d")
 
-price_path = f"docs/data/prices/{date_str}.csv"
-flow_path  = f"docs/data/flows/{date_str}.csv"
+price_path = f"docs/out/prices/{date_str}.csv"
+flow_path  = f"docs/out/flows/{date_str}.csv"
 
 price_pub.to_csv(price_path, float_format="%.2f")
 

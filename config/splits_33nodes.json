@@ -1,43 +1,37 @@
 {
   "Hebei": {
     "HEBEI_NORTH": [
-      "Zhangjiakou",
-      "Chengde",
-      "Tangshan",
-      "Qinhuangdao"
+      "张家口市",
+      "承德市",
+      "唐山市",
+      "秦皇岛市"
     ],
     "HEBEI_SOUTH": [
-      "Shijiazhuang",
-      "Handan",
-      "Xingtai",
-      "Baoding",
-      "Cangzhou",
-      "Hengshui",
-      "Langfang"
+      "石家庄市",
+      "邯郸市",
+      "邢台市",
+      "保定市",
+      "沧州市",
+      "廊坊市",
+      "衡水市"
     ]
   },
-
   "Inner Mongolia": {
     "NM_EAST": [
-      "HulunBuir",
-      "Hulunbuir",
-      "Hinggan",
-      "Tongliao",
-      "Chifeng",
-      "Cifeng",
-      "Xilingol",
-      "XilinGol",
-      "Xilingol League"
+      "海拉尔市",
+      "乌兰浩特市",
+      "通辽市",
+      "赤峰市",
+      "锡林浩特市"
     ],
     "NM_WEST": [
-      "Hohhot",
-      "Baotou",
-      "Ordos",
-      "Wuhai",
-      "Bayannur",
-      "Bayannaoer",
-      "Ulanqab",
-      "Alxa"
+      "呼和浩特市",
+      "包头市",
+      "东胜市",
+      "乌海市",
+      "临河市",
+      "集宁市",
+      "阿拉善左旗"
     ]
   }
 }
