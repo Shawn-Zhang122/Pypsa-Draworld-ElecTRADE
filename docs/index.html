@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>China ElecTRADE Daily Market</title>
+
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px auto;
+    max-width: 1600px;
+}
+
+h2 { margin-top: 40px; }
+
+#priceMap, #provinceCurve {
+    height: 650px;
+}
+
+#socChart {
+    height: 600px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>China ElecTRADE — Daily Results</h1>
+
+<div style="display:flex; gap:30px;">
+
+    <div style="flex:1;">
+        <h2>Provincial Price Distribution (24h Avg)</h2>
+        <div id="priceMap"></div>
+    </div>
+
+    <div style="flex:1;">
+        <h2 id="curveTitle">Hourly Price</h2>
+        <div id="provinceCurve"></div>
+    </div>
+
+</div>
+
+<h2>Final Storage SOC</h2>
+<div id="socChart"></div>
+
+<div id="error" style="color:red;"></div>
+
+<script>
+
+const cacheBuster = "?v=" + new Date().getTime();
+
+let globalGeo;
+let mapInstance;
+
+fetch("data/index.json" + cacheBuster)
+.then(r => r.json())
+.then(config => {
+
+    const latestPrice = config.price_files.sort().reverse()[0];
+
+    return d3.csv("data/prices/" + latestPrice + cacheBuster)
+    .then(data => {
+
+        const columns = Object.keys(data[0]);
+        const provinces = columns.filter(c =>
+            c !== "snapshot" && !c.includes("__")
+        );
+
+        const timestamps = data.map(d => d.snapshot);
+
+        // Compute 24h average
+        let avgPrice = {};
+        provinces.forEach(zone => {
+            const vals = data.map(d => +d[zone]);
+            avgPrice[zone] =
+                vals.reduce((a,b)=>a+b,0) / vals.length;
+        });
+
+        initMap(avgPrice, provinces, data, timestamps);
+
+        return config;
+    });
+
+})
+.then(config => {
+
+    return d3.csv("data/" + config.soc_file + cacheBuster)
+    .then(data => {
+
+        const names = data.map(d => d.name);
+        const values = data.map(d => +Object.values(d)[1]);
+
+        Plotly.newPlot("socChart", [{
+            x: names,
+            y: values,
+            type: "bar"
+        }], {
+            title: "Final Storage SOC",
+            xaxis: { title: "Storage Unit" },
+            yaxis: { title: "Energy (MWh)" }
+        });
+    });
+
+})
+.catch(error => {
+    document.getElementById("error").innerText =
+        "Error loading data: " + error.message;
+});
+
+function initMap(avgPrice, provinces, data, timestamps) {
+
+    mapInstance = new maplibregl.Map({
+        container: 'priceMap',
+        style: {
+            "version": 8,
+            "sources": {},
+            "layers": [{
+                "id": "background",
+                "type": "background",
+                "paint": { "background-color": "#f7f7f7" }
+            }]
+        },
+        center: [105, 35],
+        zoom: 4
+    });
+
+    mapInstance.on('load', () => {
+
+        fetch("geo/china_33nodes.geojson")
+        .then(r => r.json())
+        .then(geo => {
+
+            globalGeo = geo;
+
+            globalGeo.features.forEach(f => {
+                const name = f.properties.name;
+                f.properties.price = avgPrice[name] || 0;
+            });
+
+            mapInstance.addSource('provinces', {
+                type: 'geojson',
+                data: globalGeo
+            });
+
+            mapInstance.addLayer({
+                id: 'province-fill',
+                type: 'fill',
+                source: 'provinces',
+                paint: {
+                    'fill-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'price'],
+                        0, '#2166ac',
+                        200, '#f7f7f7',
+                        400, '#b2182b'
+                    ],
+                    'fill-opacity': 0.85
+                }
+            });
+
+            mapInstance.addLayer({
+                id: 'province-border',
+                type: 'line',
+                source: 'provinces',
+                paint: {
+                    'line-color': '#444',
+                    'line-width': 1
+                }
+            });
+
+            mapInstance.on('click', 'province-fill', e => {
+
+                const zone = e.features[0].properties.name;
+                showProvinceCurve(zone, data, timestamps);
+            });
+
+            mapInstance.on('mousemove', 'province-fill', e => {
+                const p = e.features[0].properties;
+                mapInstance.getCanvas().style.cursor = 'pointer';
+
+                new maplibregl.Popup({
+                    closeButton: false,
+                    closeOnClick: false
+                })
+                .setLngLat(e.lngLat)
+                .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(1)}`)
+                .addTo(mapInstance);
+            });
+
+        });
+    });
+}
+
+function showProvinceCurve(zone, data, timestamps) {
+
+    const values = data.map(d => +d[zone]);
+
+    Plotly.newPlot("provinceCurve", [{
+        x: timestamps,
+        y: values,
+        mode: "lines+markers",
+        name: zone
+    }], {
+        title: zone + " — Hourly Price",
+        xaxis: { title: "Time" },
+        yaxis: { title: "Price (€/MWh)" }
+    });
+
+    document.getElementById("curveTitle").innerText =
+        "Hourly Price — " + zone;
+}
+
+</script>
+
+</body>
+</html>
