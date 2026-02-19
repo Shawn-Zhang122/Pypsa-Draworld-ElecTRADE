@@ -184,7 +184,16 @@ if leftover_hb or leftover_nm:
 # ----------------------------
 
 gdf_33 = joined[["node", "geometry"]].dissolve(by="node", as_index=False)
-gdf_33["geometry"] = gdf_33["geometry"].simplify(0.02, preserve_topology=True)
+
+# Ensure WGS84 for web maps
+gdf_33 = gdf_33.to_crs("EPSG:4326")
+
+# Very mild simplification
+gdf_33["geometry"] = gdf_33["geometry"].simplify(
+    0.05,  # increase tolerance slightly
+    preserve_topology=True
+)
+
 gdf_33 = gdf_33.rename(columns={"node": "name"})
 
 print("Nodes generated:", sorted(gdf_33["name"].unique()))

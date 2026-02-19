@@ -1,0 +1,183 @@
+INFO:linopy.model: Solve problem using Gurobi solver
+INFO:linopy.model:Solver options:
+ - Threads: 4
+ - Method: 2
+ - Crossover: 0
+ - Presolve: 2
+ - NumericFocus: 3
+INFO:linopy.io:Writing objective.
+Running day-ahead simulation for delivery date: 2025-02-20 00:00:00
+Loaded previous SOC state.
+Optimizing 48h rolling horizon...
+Writing constraints.:   0%|[38;2;128;191;255m          [0m| 0/9 [00:00<?, ?it/s]Writing constraints.:  11%|[38;2;128;191;255m█         [0m| 1/9 [00:00<00:01,  4.59it/s]Writing constraints.:  22%|[38;2;128;191;255m██▏       [0m| 2/9 [00:00<00:01,  5.12it/s]Writing constraints.:  89%|[38;2;128;191;255m████████▉ [0m| 8/9 [00:00<00:00, 18.48it/s]Writing constraints.: 100%|[38;2;128;191;255m██████████[0m| 9/9 [00:00<00:00, 15.90it/s]
+Writing continuous variables.:   0%|[38;2;128;191;255m          [0m| 0/4 [00:00<?, ?it/s]Writing continuous variables.: 100%|[38;2;128;191;255m██████████[0m| 4/4 [00:00<00:00, 99.23it/s]
+INFO:linopy.io: Writing time: 0.72s
+Set parameter WLSAccessID
+INFO:gurobipy:Set parameter WLSAccessID
+Set parameter WLSSecret
+INFO:gurobipy:Set parameter WLSSecret
+Set parameter LicenseID to value 2619071
+INFO:gurobipy:Set parameter LicenseID to value 2619071
+Academic license 2619071 - for non-commercial use only - registered to sh___@ucsd.edu
+INFO:gurobipy:Academic license 2619071 - for non-commercial use only - registered to sh___@ucsd.edu
+Read LP format model from file /private/tmp/linopy-problem-mlk8sgwj.lp
+INFO:gurobipy:Read LP format model from file /private/tmp/linopy-problem-mlk8sgwj.lp
+Reading time = 0.66 seconds
+INFO:gurobipy:Reading time = 0.66 seconds
+obj: 363120 rows, 180768 columns, 554204 nonzeros
+INFO:gurobipy:obj: 363120 rows, 180768 columns, 554204 nonzeros
+Set parameter Threads to value 4
+INFO:gurobipy:Set parameter Threads to value 4
+Set parameter Method to value 2
+INFO:gurobipy:Set parameter Method to value 2
+Set parameter Crossover to value 0
+INFO:gurobipy:Set parameter Crossover to value 0
+Set parameter Presolve to value 2
+INFO:gurobipy:Set parameter Presolve to value 2
+Set parameter NumericFocus to value 3
+INFO:gurobipy:Set parameter NumericFocus to value 3
+Gurobi Optimizer version 11.0.3 build v11.0.3rc0 (mac64[x86] - Darwin 22.6.0 22H730)
+INFO:gurobipy:Gurobi Optimizer version 11.0.3 build v11.0.3rc0 (mac64[x86] - Darwin 22.6.0 22H730)
+
+INFO:gurobipy:
+CPU model: Intel(R) Core(TM) i5-7500 CPU @ 3.40GHz
+INFO:gurobipy:CPU model: Intel(R) Core(TM) i5-7500 CPU @ 3.40GHz
+Thread count: 4 physical cores, 4 logical processors, using up to 4 threads
+INFO:gurobipy:Thread count: 4 physical cores, 4 logical processors, using up to 4 threads
+
+INFO:gurobipy:
+Academic license 2619071 - for non-commercial use only - registered to sh___@ucsd.edu
+INFO:gurobipy:Academic license 2619071 - for non-commercial use only - registered to sh___@ucsd.edu
+Optimize a model with 363120 rows, 180768 columns and 554204 nonzeros
+INFO:gurobipy:Optimize a model with 363120 rows, 180768 columns and 554204 nonzeros
+Model fingerprint: 0xff94c403
+INFO:gurobipy:Model fingerprint: 0xff94c403
+Coefficient statistics:
+INFO:gurobipy:Coefficient statistics:
+  Matrix range     [1e-02, 1e+00]
+INFO:gurobipy:  Matrix range     [1e-02, 1e+00]
+  Objective range  [2e+01, 1e+04]
+INFO:gurobipy:  Objective range  [2e+01, 1e+04]
+  Bounds range     [0e+00, 0e+00]
+INFO:gurobipy:  Bounds range     [0e+00, 0e+00]
+  RHS range        [4e-09, 1e+07]
+INFO:gurobipy:  RHS range        [4e-09, 1e+07]
+Presolve removed 8263 rows and 184268 columns
+INFO:gurobipy:Presolve removed 8263 rows and 184268 columns
+Presolve time: 1.92s
+INFO:gurobipy:Presolve time: 1.92s
+Presolved: 172505 rows, 178852 columns, 369194 nonzeros
+INFO:gurobipy:Presolved: 172505 rows, 178852 columns, 369194 nonzeros
+Ordering time: 0.37s
+INFO:gurobipy:Ordering time: 0.37s
+
+INFO:gurobipy:
+Barrier statistics:
+INFO:gurobipy:Barrier statistics:
+ Free vars  : 34
+INFO:gurobipy: Free vars  : 34
+ AA' NZ     : 9.278e+05
+INFO:gurobipy: AA' NZ     : 9.278e+05
+ Factor NZ  : 1.585e+06 (roughly 50 MB of memory)
+INFO:gurobipy: Factor NZ  : 1.585e+06 (roughly 50 MB of memory)
+ Factor Ops : 1.055e+08 (less than 1 second per iteration)
+INFO:gurobipy: Factor Ops : 1.055e+08 (less than 1 second per iteration)
+ Threads    : 4
+INFO:gurobipy: Threads    : 4
+
+INFO:gurobipy:
+                  Objective                Residual
+INFO:gurobipy:                  Objective                Residual
+Iter       Primal          Dual         Primal    Dual     Compl     Time
+INFO:gurobipy:Iter       Primal          Dual         Primal    Dual     Compl     Time
+   0  -1.92029968e+12  3.70257707e+11  1.75e+04 1.26e+04  1.26e+08     3s
+INFO:gurobipy:   0  -1.92029968e+12  3.70257707e+11  1.75e+04 1.26e+04  1.26e+08     3s
+   1  -1.23047975e+12  1.26360838e+11  5.51e+03 2.85e+03  3.56e+07     3s
+INFO:gurobipy:   1  -1.23047975e+12  1.26360838e+11  5.51e+03 2.85e+03  3.56e+07     3s
+   2  -5.60428833e+11  4.88336447e+10  1.57e+03 4.90e+02  9.49e+06     3s
+INFO:gurobipy:   2  -5.60428833e+11  4.88336447e+10  1.57e+03 4.90e+02  9.49e+06     3s
+   3  -1.35870949e+11  1.43524186e+10  2.50e+02 6.61e+01  1.85e+06     3s
+INFO:gurobipy:   3  -1.35870949e+11  1.43524186e+10  2.50e+02 6.61e+01  1.85e+06     3s
+   4  -3.08605402e+10  7.51176852e+09  4.76e+01 9.61e+00  4.37e+05     3s
+INFO:gurobipy:   4  -3.08605402e+10  7.51176852e+09  4.76e+01 9.61e+00  4.37e+05     3s
+   5  -1.19654866e+10  5.10493447e+09  1.75e+01 2.31e+00  1.92e+05     3s
+INFO:gurobipy:   5  -1.19654866e+10  5.10493447e+09  1.75e+01 2.31e+00  1.92e+05     3s
+   6  -4.43141676e+09  4.06992992e+09  6.97e+00 1.03e+00  9.50e+04     3s
+INFO:gurobipy:   6  -4.43141676e+09  4.06992992e+09  6.97e+00 1.03e+00  9.50e+04     3s
+   7  -8.65451244e+08  3.35151709e+09  2.31e+00 5.17e-01  4.69e+04     3s
+INFO:gurobipy:   7  -8.65451244e+08  3.35151709e+09  2.31e+00 5.17e-01  4.69e+04     3s
+   8   7.14364901e+08  2.60250267e+09  1.07e+00 1.52e-01  2.10e+04     3s
+INFO:gurobipy:   8   7.14364901e+08  2.60250267e+09  1.07e+00 1.52e-01  2.10e+04     3s
+   9   1.27852461e+09  2.38753668e+09  6.48e-01 8.67e-02  1.23e+04     3s
+INFO:gurobipy:   9   1.27852461e+09  2.38753668e+09  6.48e-01 8.67e-02  1.23e+04     3s
+  10   1.66982315e+09  2.20585258e+09  3.19e-01 3.81e-02  5.96e+03     4s
+INFO:gurobipy:  10   1.66982315e+09  2.20585258e+09  3.19e-01 3.81e-02  5.96e+03     4s
+  11   1.83816564e+09  2.09315490e+09  1.60e-01 1.26e-02  2.84e+03     4s
+INFO:gurobipy:  11   1.83816564e+09  2.09315490e+09  1.60e-01 1.26e-02  2.84e+03     4s
+  12   1.92223723e+09  2.05721953e+09  7.81e-02 6.03e-03  1.50e+03     4s
+INFO:gurobipy:  12   1.92223723e+09  2.05721953e+09  7.81e-02 6.03e-03  1.50e+03     4s
+  13   1.96421418e+09  2.03823556e+09  4.51e-02 3.00e-03  8.24e+02     4s
+INFO:gurobipy:  13   1.96421418e+09  2.03823556e+09  4.51e-02 3.00e-03  8.24e+02     4s
+  14   1.98473358e+09  2.03051355e+09  2.79e-02 1.84e-03  5.09e+02     4s
+INFO:gurobipy:  14   1.98473358e+09  2.03051355e+09  2.79e-02 1.84e-03  5.09e+02     4s
+  15   2.00144141e+09  2.02533799e+09  1.31e-02 1.07e-03  2.65e+02     4s
+INFO:gurobipy:  15   2.00144141e+09  2.02533799e+09  1.31e-02 1.07e-03  2.65e+02     4s
+  16   2.00951759e+09  2.02041091e+09  5.78e-03 4.01e-04  1.21e+02     4s
+INFO:gurobipy:  16   2.00951759e+09  2.02041091e+09  5.78e-03 4.01e-04  1.21e+02     4s
+  17   2.01316048e+09  2.01889686e+09  2.81e-03 1.96e-04  6.36e+01     4s
+INFO:gurobipy:  17   2.01316048e+09  2.01889686e+09  2.81e-03 1.96e-04  6.36e+01     4s
+  18   2.01562908e+09  2.01805465e+09  1.04e-03 8.74e-05  2.69e+01     4s
+INFO:gurobipy:  18   2.01562908e+09  2.01805465e+09  1.04e-03 8.74e-05  2.69e+01     4s
+  19   2.01678893e+09  2.01755388e+09  2.77e-04 2.72e-05  8.45e+00     4s
+INFO:gurobipy:  19   2.01678893e+09  2.01755388e+09  2.77e-04 2.72e-05  8.45e+00     4s
+  20   2.01723075e+09  2.01736733e+09  3.50e-05 5.88e-06  1.50e+00     5s
+INFO:gurobipy:  20   2.01723075e+09  2.01736733e+09  3.50e-05 5.88e-06  1.50e+00     5s
+  21   2.01729078e+09  2.01731698e+09  7.33e-06 6.75e-07  2.89e-01     5s
+INFO:gurobipy:  21   2.01729078e+09  2.01731698e+09  7.33e-06 6.75e-07  2.89e-01     5s
+  22   2.01729145e+09  2.01731679e+09  5.12e-04 6.58e-07  2.79e-01     5s
+INFO:gurobipy:  22   2.01729145e+09  2.01731679e+09  5.12e-04 6.58e-07  2.79e-01     5s
+  23   2.01730390e+09  2.01731045e+09  1.63e-04 6.80e-08  7.27e-02     5s
+INFO:gurobipy:  23   2.01730390e+09  2.01731045e+09  1.63e-04 6.80e-08  7.27e-02     5s
+  24   2.01730904e+09  2.01730980e+09  1.91e-05 2.48e-08  8.45e-03     5s
+INFO:gurobipy:  24   2.01730904e+09  2.01730980e+09  1.91e-05 2.48e-08  8.45e-03     5s
+  25   2.01730966e+09  2.01730974e+09  2.36e-06 3.26e-09  8.50e-04     5s
+INFO:gurobipy:  25   2.01730966e+09  2.01730974e+09  2.36e-06 3.26e-09  8.50e-04     5s
+  26   2.01730971e+09  2.01730973e+09  2.31e-05 6.29e-10  1.48e-04     5s
+INFO:gurobipy:  26   2.01730971e+09  2.01730973e+09  2.31e-05 6.29e-10  1.48e-04     5s
+  27   2.01730973e+09  2.01730973e+09  2.40e-06 1.00e-10  1.73e-05     5s
+INFO:gurobipy:  27   2.01730973e+09  2.01730973e+09  2.40e-06 1.00e-10  1.73e-05     5s
+  28   2.01730973e+09  2.01730973e+09  2.76e-07 1.07e-10  1.97e-06     5s
+INFO:gurobipy:  28   2.01730973e+09  2.01730973e+09  2.76e-07 1.07e-10  1.97e-06     5s
+  29   2.01730973e+09  2.01730973e+09  2.79e-08 1.56e-10  2.01e-07     6s
+INFO:gurobipy:  29   2.01730973e+09  2.01730973e+09  2.79e-08 1.56e-10  2.01e-07     6s
+  30   2.01730973e+09  2.01730973e+09  3.07e-09 2.69e-10  2.30e-08     6s
+INFO:gurobipy:  30   2.01730973e+09  2.01730973e+09  3.07e-09 2.69e-10  2.30e-08     6s
+  31   2.01730973e+09  2.01730973e+09  2.25e-09 6.51e-10  3.80e-09     6s
+INFO:gurobipy:  31   2.01730973e+09  2.01730973e+09  2.25e-09 6.51e-10  3.80e-09     6s
+
+INFO:gurobipy:
+Barrier solved model in 31 iterations and 5.64 seconds (4.07 work units)
+INFO:gurobipy:Barrier solved model in 31 iterations and 5.64 seconds (4.07 work units)
+Optimal objective 2.01730973e+09
+INFO:gurobipy:Optimal objective 2.01730973e+09
+
+INFO:gurobipy:
+Warning: environment still referenced so free is deferred (Continue to use WLS)
+INFO:gurobipy:Warning: environment still referenced so free is deferred (Continue to use WLS)
+INFO:linopy.constants: Optimization successful: 
+Status: ok
+Termination condition: optimal
+Solution: 180768 primals, 363120 duals
+Objective: 2.02e+09
+Solver model: available
+Solver message: 2
+
+INFO:pypsa.optimization.optimize:The shadow-prices of the constraints Generator-fix-p-lower, Generator-fix-p-upper, Link-fix-p-lower, Link-fix-p-upper, Store-fix-e-lower, Store-fix-e-upper, Store-energy_balance were not assigned to the network.
+Published prices → docs/out/prices/2025-02-20.csv
+Saved updated SOC state.
+Daily rolling simulation completed.
+The following paths are ignored by one of your .gitignore files:
+data
+hint: Use -f if you really want to add them.
+hint: Turn this message off by running
+hint: "git config advice.addIgnoredFile false"
