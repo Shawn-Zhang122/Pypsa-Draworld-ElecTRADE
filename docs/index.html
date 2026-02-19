@@ -113,15 +113,7 @@ function initMap(avgPrice, provinces, data, timestamps) {
 
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
-        style: {
-            "version": 8,
-            "sources": {},
-            "layers": [{
-                "id": "background",
-                "type": "background",
-                "paint": { "background-color": "#f7f7f7" }
-            }]
-        },
+        style: "https://demotiles.maplibre.org/style.json",
         center: [105, 35],
         zoom: 4
     });
