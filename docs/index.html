@@ -9,8 +9,6 @@
 <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet"/>
 <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
-
 <style>
 body {
     font-family: Arial, sans-serif;
@@ -49,7 +47,7 @@ const cacheBuster = "?v=" + new Date().getTime();
 let mapInstance;
 let hoverPopup;
 
-/* ---------------- CSV LOADER ---------------- */
+/* -------- CSV loader -------- */
 
 async function loadCSV(url) {
     const text = await fetch(url).then(r => r.text());
@@ -63,7 +61,7 @@ async function loadCSV(url) {
     });
 }
 
-/* ---------------- MAIN ---------------- */
+/* -------- MAIN -------- */
 
 async function loadApp() {
 
@@ -115,52 +113,31 @@ async function loadApp() {
     }
 }
 
-/* ---------------- CRS AUTO FIX ---------------- */
-
-function fixProjectionIfNeeded(geo) {
-
-    const sample =
-        geo.features[0].geometry.coordinates.flat(3)[0];
-
-    if (Math.abs(sample[0]) > 1000) {
-
-        proj4.defs("EPSG:3857",
-        "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs");
-
-        geo.features.forEach(f => {
-            f.geometry.coordinates =
-                reprojectCoords(f.geometry.coordinates);
-        });
-    }
-
-    return geo;
-}
-
-function reprojectCoords(coords) {
-    if (typeof coords[0] === "number") {
-        return proj4("EPSG:3857","EPSG:4326", coords);
-    }
-    return coords.map(c => reprojectCoords(c));
-}
-
-/* ---------------- MAP ---------------- */
+/* -------- MAP -------- */
 
 function initMap(avgPrice, data, timestamps) {
 
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
-        style: "https://demotiles.maplibre.org/style.json",
+        style: {
+            version: 8,
+            sources: {},
+            layers: [
+                {
+                    id: "background",
+                    type: "background",
+                    paint: { "background-color": "#f7f7f7" }
+                }
+            ]
+        },
         center: [105, 35],
-        zoom: 4,
-        renderWorldCopies: false
+        zoom: 4
     });
 
     mapInstance.on('load', async () => {
 
-        let geo = await fetch("geo/china_33nodes.geojson" + cacheBuster)
+        const geo = await fetch("geo/china_33nodes.geojson" + cacheBuster)
             .then(r => r.json());
-
-        geo = fixProjectionIfNeeded(geo);
 
         geo.features.forEach(f => {
             const name = f.properties.name;
@@ -196,7 +173,7 @@ function initMap(avgPrice, data, timestamps) {
             type: 'line',
             source: 'provinces',
             paint: {
-                'line-color': '#444',
+                'line-color': '#333',
                 'line-width': 1
             }
         });
@@ -245,7 +222,7 @@ function initMap(avgPrice, data, timestamps) {
     });
 }
 
-/* ---------------- HOURLY CURVE ---------------- */
+/* -------- CURVE -------- */
 
 function showProvinceCurve(zone, data, timestamps) {
 
