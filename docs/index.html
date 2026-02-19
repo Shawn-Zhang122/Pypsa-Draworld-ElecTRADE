@@ -9,8 +9,6 @@
 <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet"/>
 <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 
-<!-- <h1 style="color:red;">DEPLOY TEST 123456</h1> -->
-
 <style>
 body {
     font-family: Arial, sans-serif;
@@ -81,6 +79,7 @@ async function loadApp() {
         );
 
         const columns = Object.keys(priceData[0]);
+
         const provinces = columns.filter(c =>
             c !== "snapshot" && !c.includes("__")
         );
@@ -88,6 +87,7 @@ async function loadApp() {
         const timestamps = priceData.map(d => d.snapshot);
 
         let avgPrice = {};
+
         provinces.forEach(zone => {
             const vals = priceData.map(d => +d[zone]);
             avgPrice[zone] =
@@ -131,35 +131,32 @@ function initMap(avgPrice, data, timestamps) {
         const geo = await fetch("geo/china_33nodes.geojson")
             .then(r => r.json());
 
-        /* ---------- SAFE BOUNDS COMPUTATION ---------- */
+        /* ---------- SAFE BOUNDS FOR MULTIPOLYGON ---------- */
 
         const bounds = new maplibregl.LngLatBounds();
 
         geo.features.forEach(feature => {
 
-            if (feature.geometry.type === "MultiPolygon") {
-
-                feature.geometry.coordinates.forEach(polygon => {
-                    polygon.forEach(ring => {
-                        ring.forEach(coord => {
-                            bounds.extend(coord);
-                        });
-                    });
-                });
-
-            } else if (feature.geometry.type === "Polygon") {
-
-                feature.geometry.coordinates.forEach(ring => {
+            feature.geometry.coordinates.forEach(polygon => {
+                polygon.forEach(ring => {
                     ring.forEach(coord => {
-                        bounds.extend(coord);
+                        if (
+                            Array.isArray(coord) &&
+                            coord.length === 2 &&
+                            typeof coord[0] === "number" &&
+                            typeof coord[1] === "number"
+                        ) {
+                            bounds.extend(coord);
+                        }
                     });
                 });
-            }
+            });
+
         });
 
         mapInstance.fitBounds(bounds, { padding: 40 });
 
-        /* ---------- ATTACH PRICE DATA ---------- */
+        /* ---------- ATTACH PRICE ---------- */
 
         geo.features.forEach(f => {
             const name = f.properties.name;
@@ -175,7 +172,7 @@ function initMap(avgPrice, data, timestamps) {
             data: geo
         });
 
-        /* ---------- FILL LAYER ---------- */
+        /* ---------- FILL ---------- */
 
         mapInstance.addLayer({
             id: 'province-fill',
@@ -231,9 +228,7 @@ function initMap(avgPrice, data, timestamps) {
         });
 
         mapInstance.on('mousemove', 'province-fill', e => {
-
             const p = e.features[0].properties;
-
             hoverPopup
                 .setLngLat(e.lngLat)
                 .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(1)}`)
@@ -243,8 +238,6 @@ function initMap(avgPrice, data, timestamps) {
         mapInstance.on('mouseleave', 'province-fill', () => {
             hoverPopup.remove();
         });
-
-        /* ---------- CLICK → CURVE ---------- */
 
         mapInstance.on('click', 'province-fill', e => {
             const zone = e.features[0].properties.name;
