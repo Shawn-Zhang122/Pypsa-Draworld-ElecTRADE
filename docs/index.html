@@ -43,9 +43,10 @@ h2 { margin-top: 40px; }
 
 <script>
 
-const cacheBuster = "?v=" + new Date().getTime();
 let mapInstance;
 let hoverPopup;
+
+/* ---------- CSV Loader ---------- */
 
 async function loadCSV(url) {
     const res = await fetch(url);
@@ -61,18 +62,20 @@ async function loadCSV(url) {
     });
 }
 
+/* ---------- MAIN ---------- */
+
 async function loadApp() {
 
     try {
 
-        const config = await fetch("out/index.json" + cacheBuster)
+        const config = await fetch("out/index.json")
             .then(r => r.json());
 
         const latestPrice =
             config.price_files.sort().reverse()[0];
 
         const priceData = await loadCSV(
-            "out/prices/" + latestPrice + cacheBuster
+            "out/prices/" + latestPrice
         );
 
         const columns = Object.keys(priceData[0]);
@@ -92,7 +95,7 @@ async function loadApp() {
         initMap(avgPrice, priceData, timestamps);
 
         const socData = await loadCSV(
-            "out/" + config.soc_file + cacheBuster
+            "out/" + config.soc_file
         );
 
         Plotly.newPlot("socChart", [{
@@ -112,13 +115,13 @@ async function loadApp() {
     }
 }
 
+/* ---------- MAP ---------- */
+
 function initMap(avgPrice, data, timestamps) {
 
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
-        style: "https://demotiles.maplibre.org/style.json",
-        center: [105, 35],
-        zoom: 4
+        style: "https://demotiles.maplibre.org/style.json"
     });
 
     mapInstance.on('load', async () => {
@@ -126,9 +129,24 @@ function initMap(avgPrice, data, timestamps) {
         const geo = await fetch("geo/china_33nodes.geojson")
             .then(r => r.json());
 
+        /* -------- Force correct viewport -------- */
+
+        const bounds = new maplibregl.LngLatBounds();
+
         geo.features.forEach(f => {
-            const name = f.properties.NAME;   // FIX HERE
-            const price = avgPrice[name] || 0;
+            const coords = f.geometry.coordinates.flat(3);
+            for (let i = 0; i < coords.length; i++) {
+                bounds.extend(coords[i]);
+            }
+        });
+
+        mapInstance.fitBounds(bounds, { padding: 20 });
+
+        /* -------- Attach price -------- */
+
+        geo.features.forEach(f => {
+            const name = f.properties.name;
+            const price = avgPrice[name] ?? 0;
             f.properties.price = price;
             f.properties.label = price.toFixed(0);
         });
@@ -137,9 +155,6 @@ function initMap(avgPrice, data, timestamps) {
             type: 'geojson',
             data: geo
         });
-
-        const layers = mapInstance.getStyle().layers;
-        const firstSymbol = layers.find(l => l.type === 'symbol');
 
         mapInstance.addLayer({
             id: 'province-fill',
@@ -156,7 +171,7 @@ function initMap(avgPrice, data, timestamps) {
                 ],
                 'fill-opacity': 0.75
             }
-        }, firstSymbol?.id);
+        });
 
         mapInstance.addLayer({
             id: 'province-border',
@@ -166,7 +181,7 @@ function initMap(avgPrice, data, timestamps) {
                 'line-color': '#000',
                 'line-width': 1.2
             }
-        }, firstSymbol?.id);
+        });
 
         mapInstance.addLayer({
             id: 'province-label',
@@ -174,8 +189,7 @@ function initMap(avgPrice, data, timestamps) {
             source: 'provinces',
             layout: {
                 'text-field': ['get', 'label'],
-                'text-size': 14,
-                'text-anchor': 'center'
+                'text-size': 14
             },
             paint: {
                 'text-color': '#000',
@@ -193,7 +207,7 @@ function initMap(avgPrice, data, timestamps) {
             const p = e.features[0].properties;
             hoverPopup
                 .setLngLat(e.lngLat)
-                .setHTML(`<b>${p.NAME}</b><br>Avg: ${p.price.toFixed(1)}`)
+                .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(1)}`)
                 .addTo(mapInstance);
         });
 
@@ -202,12 +216,14 @@ function initMap(avgPrice, data, timestamps) {
         });
 
         mapInstance.on('click', 'province-fill', e => {
-            const zone = e.features[0].properties.NAME;
+            const zone = e.features[0].properties.name;
             showProvinceCurve(zone, data, timestamps);
         });
 
     });
 }
+
+/* ---------- CURVE ---------- */
 
 function showProvinceCurve(zone, data, timestamps) {
 
