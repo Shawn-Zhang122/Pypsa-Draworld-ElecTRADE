@@ -47,8 +47,6 @@ const cacheBuster = "?v=" + new Date().getTime();
 let mapInstance;
 let hoverPopup;
 
-/* -------- CSV Loader -------- */
-
 async function loadCSV(url) {
     const res = await fetch(url);
     if (!res.ok) throw new Error("CSV not found: " + url);
@@ -62,8 +60,6 @@ async function loadCSV(url) {
         );
     });
 }
-
-/* -------- MAIN -------- */
 
 async function loadApp() {
 
@@ -116,8 +112,6 @@ async function loadApp() {
     }
 }
 
-/* -------- MAP -------- */
-
 function initMap(avgPrice, data, timestamps) {
 
     mapInstance = new maplibregl.Map({
@@ -129,19 +123,11 @@ function initMap(avgPrice, data, timestamps) {
 
     mapInstance.on('load', async () => {
 
-        console.log("Map fully loaded");
-
-        const res = await fetch("geo/china_33nodes.geojson");
-        if (!res.ok) {
-            console.error("GeoJSON 404");
-            return;
-        }
-
-        const geo = await res.json();
-        console.log("Features:", geo.features.length);
+        const geo = await fetch("geo/china_33nodes.geojson")
+            .then(r => r.json());
 
         geo.features.forEach(f => {
-            const name = f.properties.name;
+            const name = f.properties.NAME;   // FIX HERE
             const price = avgPrice[name] || 0;
             f.properties.price = price;
             f.properties.label = price.toFixed(0);
@@ -152,7 +138,6 @@ function initMap(avgPrice, data, timestamps) {
             data: geo
         });
 
-        // Insert ABOVE existing layers
         const layers = mapInstance.getStyle().layers;
         const firstSymbol = layers.find(l => l.type === 'symbol');
 
@@ -208,7 +193,7 @@ function initMap(avgPrice, data, timestamps) {
             const p = e.features[0].properties;
             hoverPopup
                 .setLngLat(e.lngLat)
-                .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(1)}`)
+                .setHTML(`<b>${p.NAME}</b><br>Avg: ${p.price.toFixed(1)}`)
                 .addTo(mapInstance);
         });
 
@@ -217,15 +202,12 @@ function initMap(avgPrice, data, timestamps) {
         });
 
         mapInstance.on('click', 'province-fill', e => {
-            const zone = e.features[0].properties.name;
+            const zone = e.features[0].properties.NAME;
             showProvinceCurve(zone, data, timestamps);
         });
 
     });
 }
-
-
-/* -------- CURVE -------- */
 
 function showProvinceCurve(zone, data, timestamps) {
 
