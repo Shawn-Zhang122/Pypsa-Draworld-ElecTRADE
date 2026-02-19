@@ -46,14 +46,19 @@ h2 { margin-top: 40px; }
 let mapInstance;
 let hoverPopup;
 
-/* ---------- CSV Loader ---------- */
+/* ---------- CSV Loader (BOM SAFE) ---------- */
 
 async function loadCSV(url) {
     const res = await fetch(url);
     if (!res.ok) throw new Error("CSV not found: " + url);
+
     const text = await res.text();
     const rows = text.trim().split("\n");
-    const headers = rows[0].split(",");
+
+    const headers = rows[0]
+        .replace(/^\uFEFF/, "")   // 🔥 remove BOM
+        .split(",");
+
     return rows.slice(1).map(row => {
         const values = row.split(",");
         return Object.fromEntries(
@@ -81,7 +86,7 @@ async function loadApp() {
         const columns = Object.keys(priceData[0]);
 
         const provinces = columns.filter(c =>
-            c !== "snapshot" && !c.includes("__")
+            c.trim() !== "snapshot" && !c.includes("__")
         );
 
         const timestamps = priceData.map(d => d.snapshot);
@@ -89,9 +94,12 @@ async function loadApp() {
         let avgPrice = {};
 
         provinces.forEach(zone => {
-            const vals = priceData.map(d => +d[zone]);
+            const vals = priceData.map(d => Number(d[zone]));
+            const valid = vals.filter(v => !isNaN(v));
             avgPrice[zone] =
-                vals.reduce((a,b)=>a+b,0) / vals.length;
+                valid.length > 0
+                    ? valid.reduce((a,b)=>a+b,0) / valid.length
+                    : 0;
         });
 
         initMap(avgPrice, priceData, timestamps);
@@ -102,7 +110,7 @@ async function loadApp() {
 
         Plotly.newPlot("socChart", [{
             x: socData.map(d => d.name),
-            y: socData.map(d => +Object.values(d)[1]),
+            y: socData.map(d => Number(Object.values(d)[1])),
             type: "bar"
         }], {
             title: "Final Storage SOC",
@@ -131,12 +139,11 @@ function initMap(avgPrice, data, timestamps) {
         const geo = await fetch("geo/china_33nodes.geojson")
             .then(r => r.json());
 
-        /* ---------- SAFE BOUNDS FOR MULTIPOLYGON ---------- */
+        /* ---------- SAFE BOUNDS (MultiPolygon only) ---------- */
 
         const bounds = new maplibregl.LngLatBounds();
 
         geo.features.forEach(feature => {
-
             feature.geometry.coordinates.forEach(polygon => {
                 polygon.forEach(ring => {
                     ring.forEach(coord => {
@@ -151,21 +158,27 @@ function initMap(avgPrice, data, timestamps) {
                     });
                 });
             });
-
         });
 
         mapInstance.fitBounds(bounds, { padding: 40 });
 
-        /* ---------- ATTACH PRICE ---------- */
+        /* ---------- ATTACH PRICE (STRICT MATCH) ---------- */
 
         geo.features.forEach(f => {
-            const name = f.properties.name;
-            const price = avgPrice[name] ?? 0;
-            f.properties.price = price;
-            f.properties.label = price.toFixed(0);
+
+            const geoName = f.properties.name.trim();
+
+            const matchKey = Object.keys(avgPrice).find(k =>
+                k.trim() === geoName
+            );
+
+            const price = matchKey ? avgPrice[matchKey] : 0;
+
+            f.properties.price = isFinite(price) ? price : 0;
+            f.properties.label = f.properties.price.toFixed(0);
         });
 
-        /* ---------- ADD SOURCE ---------- */
+        /* ---------- SOURCE ---------- */
 
         mapInstance.addSource('provinces', {
             type: 'geojson',
@@ -253,7 +266,7 @@ function showProvinceCurve(zone, data, timestamps) {
 
     Plotly.newPlot("provinceCurve", [{
         x: timestamps,
-        y: data.map(d => +d[zone]),
+        y: data.map(d => Number(d[zone])),
         mode: "lines+markers",
         name: zone
     }], {
