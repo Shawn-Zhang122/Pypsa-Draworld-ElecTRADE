@@ -47,10 +47,12 @@ const cacheBuster = "?v=" + new Date().getTime();
 let mapInstance;
 let hoverPopup;
 
-/* -------- CSV loader -------- */
+/* -------- CSV Loader -------- */
 
 async function loadCSV(url) {
-    const text = await fetch(url).then(r => r.text());
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("CSV not found: " + url);
+    const text = await res.text();
     const rows = text.trim().split("\n");
     const headers = rows[0].split(",");
     return rows.slice(1).map(row => {
@@ -109,7 +111,8 @@ async function loadApp() {
 
     } catch (err) {
         document.getElementById("error").innerText =
-            "Error loading data: " + err.message;
+            err.message;
+        console.error(err);
     }
 }
 
@@ -137,8 +140,12 @@ function initMap(avgPrice, data, timestamps) {
 
     mapInstance.on('load', async () => {
 
-        const geo = await fetch("/geo/china_33nodes.geojson" + cacheBuster)
-            .then(r => r.json());
+        const geo = await fetch(
+            "geo/china_33nodes.geojson" + cacheBuster
+        ).then(r => {
+            if (!r.ok) throw new Error("GeoJSON not found");
+            return r.json();
+        });
 
         geo.features.forEach(f => {
             const name = f.properties.name;
@@ -200,37 +207,14 @@ function initMap(avgPrice, data, timestamps) {
             closeOnClick: false
         });
 
-        mapInstance.on('load', async () => {
+        mapInstance.on('mousemove', 'province-fill', e => {
+            const p = e.features[0].properties;
+            mapInstance.getCanvas().style.cursor = 'pointer';
 
-            console.log("Map loaded");
-
-            try {
-                const res = await fetch("geo/china_33nodes.geojson" + cacheBuster);
-                console.log("Geo fetch status:", res.status);
-
-                const geo = await res.json();
-                console.log("Feature count:", geo.features.length);
-
-                mapInstance.addSource('provinces', {
-                    type: 'geojson',
-                    data: geo
-                });
-
-                mapInstance.addLayer({
-                    id: 'debug-fill',
-                    type: 'fill',
-                    source: 'provinces',
-                    paint: {
-                        'fill-color': '#ff0000',
-                        'fill-opacity': 0.6
-                    }
-                });
-
-                console.log("Layer added");
-
-            } catch(e) {
-                console.error("Geo error:", e);
-            }
+            hoverPopup
+                .setLngLat(e.lngLat)
+                .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(1)}`)
+                .addTo(mapInstance);
         });
 
         mapInstance.on('mouseleave', 'province-fill', () => {
