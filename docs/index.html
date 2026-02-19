@@ -122,30 +122,23 @@ function initMap(avgPrice, data, timestamps) {
 
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
-        style: {
-            version: 8,
-            glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-            sources: {},
-            layers: [
-                {
-                    id: "background",
-                    type: "background",
-                    paint: { "background-color": "#f7f7f7" }
-                }
-            ]
-        },
+        style: "https://demotiles.maplibre.org/style.json",
         center: [105, 35],
         zoom: 4
     });
 
     mapInstance.on('load', async () => {
 
-        const geo = await fetch(
-            "geo/china_33nodes.geojson" + cacheBuster
-        ).then(r => {
-            if (!r.ok) throw new Error("GeoJSON not found");
-            return r.json();
-        });
+        console.log("Map fully loaded");
+
+        const res = await fetch("geo/china_33nodes.geojson");
+        if (!res.ok) {
+            console.error("GeoJSON 404");
+            return;
+        }
+
+        const geo = await res.json();
+        console.log("Features:", geo.features.length);
 
         geo.features.forEach(f => {
             const name = f.properties.name;
@@ -158,6 +151,10 @@ function initMap(avgPrice, data, timestamps) {
             type: 'geojson',
             data: geo
         });
+
+        // Insert ABOVE existing layers
+        const layers = mapInstance.getStyle().layers;
+        const firstSymbol = layers.find(l => l.type === 'symbol');
 
         mapInstance.addLayer({
             id: 'province-fill',
@@ -172,19 +169,19 @@ function initMap(avgPrice, data, timestamps) {
                     200, '#f7f7f7',
                     400, '#b2182b'
                 ],
-                'fill-opacity': 0.85
+                'fill-opacity': 0.75
             }
-        });
+        }, firstSymbol?.id);
 
         mapInstance.addLayer({
             id: 'province-border',
             type: 'line',
             source: 'provinces',
             paint: {
-                'line-color': '#333',
-                'line-width': 1
+                'line-color': '#000',
+                'line-width': 1.2
             }
-        });
+        }, firstSymbol?.id);
 
         mapInstance.addLayer({
             id: 'province-label',
@@ -209,8 +206,6 @@ function initMap(avgPrice, data, timestamps) {
 
         mapInstance.on('mousemove', 'province-fill', e => {
             const p = e.features[0].properties;
-            mapInstance.getCanvas().style.cursor = 'pointer';
-
             hoverPopup
                 .setLngLat(e.lngLat)
                 .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(1)}`)
@@ -218,7 +213,6 @@ function initMap(avgPrice, data, timestamps) {
         });
 
         mapInstance.on('mouseleave', 'province-fill', () => {
-            mapInstance.getCanvas().style.cursor = '';
             hoverPopup.remove();
         });
 
@@ -229,6 +223,7 @@ function initMap(avgPrice, data, timestamps) {
 
     });
 }
+
 
 /* -------- CURVE -------- */
 
