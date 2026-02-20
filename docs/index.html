@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>China ElecTRADE Daily Market</title>
+<title>Pypsa-China-ElecTRADE-Draworld, 2026 Version</title>
 
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 
@@ -16,29 +16,75 @@
         max-width: 1600px;
         background-color: #fcfcfc;
     }
+
+    h1 {
+        margin-bottom: 5px;
+        font-weight: 600;
+    }
+
+    .subtitle {
+        font-size: 14px;
+        color: #666;
+        margin-bottom: 25px;
+    }
+
     h2 { margin-top: 40px; color: #333; }
-    #priceMap, #provinceCurve { height: 650px; background: white; border-radius: 8px; border: 1px solid #ddd; }
-    #socChart { height: 600px; background: white; border-radius: 8px; border: 1px solid #ddd; margin-top: 20px; }
-    #error { color:red; margin-top:10px; font-weight: bold; }
+
+    #priceMap, #provinceCurve {
+        height: 650px;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        position: relative;
+    }
+
+    #socChart {
+        height: 600px;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        margin-top: 20px;
+    }
+
+    #error {
+        color:red;
+        margin-top:10px;
+        font-weight: bold;
+    }
+
+    .map-credit {
+        position:absolute;
+        bottom:8px;
+        right:10px;
+        font-size:11px;
+        background:rgba(255,255,255,0.85);
+        padding:6px 8px;
+        border-radius:6px;
+        line-height:1.4;
+        box-shadow:0 0 4px rgba(0,0,0,0.15);
+    }
 </style>
 </head>
 
 <body>
 
-<h1>China ElecTRADE — Daily Results</h1>
+<h1>China ElecTRADE — Daily Results (t+1) </h1>
+<div class="subtitle">
+Rolling 48h dispatch | 33-node zonal pricing | Automated publication
+</div>
 
 <div style="display:flex; gap:30px;">
     <div style="flex:1;">
-        <h2>Provincial Price Distribution (24h Avg)</h2>
+        <h2>Province-Node Price Dynamics (24h Avg)</h2>
         <div id="priceMap"></div>
     </div>
     <div style="flex:1;">
-        <h2 id="curveTitle">Hourly Price</h2>
+        <h2 id="curveTitle">Price Profile, Day-ahead</h2>
         <div id="provinceCurve"></div>
     </div>
 </div>
 
-<h2>Final Storage SOC</h2>
+<h2> Storage Status of Charge (SOC) by Tomorrow </h2>
 <div id="socChart"></div>
 
 <div id="error"></div>
@@ -94,20 +140,13 @@ async function loadCSV(url) {
 /* ---------- MAIN APP ---------- */
 async function loadApp() {
     try {
-        // 1. Fetch the index
         const config = await fetch("out/index.json").then(r => r.json());
 
-        // 2. Select Latest Price File
-        // We sort the list of filenames to ensure the most recent date is at index 0
         const priceFiles = config.price_files.slice().sort((a, b) => b.localeCompare(a));
         const latestPriceFile = priceFiles[0];
-        
-        console.log("Found Price Files:", priceFiles);
-        console.log("Targeting Latest File:", latestPriceFile);
 
         const priceData = await loadCSV("out/prices/" + latestPriceFile);
-        
-        // 3. Process Columns (Excluding snapshot and battery/pumped storage)
+
         const columns = Object.keys(priceData[0]);
         const provinces = columns.filter(c => 
             c !== "snapshot" && 
@@ -117,17 +156,14 @@ async function loadApp() {
 
         const timestamps = priceData.map(d => d.snapshot);
 
-        // Calculate 24h Avg per Province
         let avgPrice = {};
         provinces.forEach(zone => {
             const vals = priceData.map(d => Number(d[zone])).filter(v => !isNaN(v));
             avgPrice[zone] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
         });
 
-        // 4. Init Map
         initMap(avgPrice, priceData, timestamps);
 
-        // 5. Load SOC Data
         const socData = await loadCSV("out/" + config.soc_file);
         Plotly.newPlot("socChart", [{
             x: socData.map(d => d.name),
@@ -135,7 +171,7 @@ async function loadApp() {
             type: "bar",
             marker: { color: '#2166ac' }
         }], {
-            title: `Final Storage SOC (${latestPriceFile.replace('.csv','')})`,
+            title: `Pump-Hydro and Battery Storage SOC (${latestPriceFile.replace('.csv','')})`,
             xaxis: { title: "Storage Unit" },
             yaxis: { title: "Energy (MWh)" }
         });
@@ -156,13 +192,12 @@ function initMap(avgPrice, data, timestamps) {
     });
 
     mapInstance.on('load', async () => {
+
         const rawGeo = await fetch("geo/china_33nodes.geojson").then(r => r.json());
 
-        // Flatten features to single Point geometry to prevent duplicate circles per province
         const processedFeatures = rawGeo.features.map(f => {
             const geoName = f.properties.name.trim();
             const price = avgPrice[geoName] || 0;
-            
             return {
                 type: "Feature",
                 properties: { ...f.properties, price: isFinite(price) ? price : 0 },
@@ -208,6 +243,16 @@ function initMap(avgPrice, data, timestamps) {
             }
         });
 
+        // ---- Credit watermark ----
+        const credit = document.createElement("div");
+        credit.className = "map-credit";
+        credit.innerHTML = `
+            ElecTRADE @ Draworld, Beijing<br>
+            Optimization @ PyPSA <br>
+            Map-Engine @ MapLibre
+        `;
+        document.getElementById("priceMap").appendChild(credit);
+
         hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
 
         mapInstance.on('mousemove', 'node-circle', e => {
@@ -227,7 +272,6 @@ function initMap(avgPrice, data, timestamps) {
             showProvinceCurve(e.features[0].properties.name, data, timestamps);
         });
 
-        // Initial curve
         if(geo.features.length > 0) {
             showProvinceCurve(geo.features[0].properties.name, data, timestamps);
         }

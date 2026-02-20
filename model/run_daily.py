@@ -1,42 +1,13 @@
 # ============================================================
 # China-Daily-ElecTRADE
-# Daily Rolling Market Simulation (48h horizon, 24h publish)
+# Rolling 48h Solve (Publish 24h)
+# Data Year = 2025
+# Publication Year = Real Calendar (e.g. 2026)
 # ============================================================
 
-#The run environment configuration
-
-# Install Miniconda3,https://docs.conda.io/en/latest/miniconda.html
-# cd ~/Downloads
-# bash Miniconda3-py39_*.sh
-
-#conda create -n pypsa-draworld-electrade python=3.9 -y
-#conda activate pypsa-draworld-electrade
-# conda install -c conda-forge \
-#   numpy=1.24 \
-#   scipy=1.10 \
-#   pandas=1.5 \
-#   xarray \
-#   netcdf4 \
-#   h5py \
-#   pytables \
-#   matplotlib \
-#   geopandas \
-#   shapely \
-#   pyproj \
-#   tqdm \
-#   pyyaml \
-#   ipython \
-#   jupyterlab -y
-
-# pip install --no-cache-dir \
-#   pypsa==0.25.1 \
-#   linopy==0.3.13
-
-# pip install gurobipy==10.0.3
-# export GRB_LICENSE_FILE=$PWD/solver/gurobi.lic
-
 import os
-from datetime import datetime, timedelta
+import json
+from datetime import datetime
 import pytz
 import pandas as pd
 
@@ -46,7 +17,7 @@ from rolling_48hours_network import build_network
 # CONFIG
 # ============================================================
 
-YEAR = 2025
+DATA_YEAR = 2025
 HORIZON_HOURS = 48
 PUBLISH_HOURS = 24
 
@@ -68,40 +39,42 @@ os.makedirs("docs/out/prices", exist_ok=True)
 os.makedirs("docs/out/flows", exist_ok=True)
 
 # ============================================================
-# Determine delivery day (China time)
+# Determine Real Publication Day (China Time)
 # ============================================================
 
-# Day-ahead market → publish next day
 tz = pytz.timezone("Asia/Shanghai")
 today_real = datetime.now(tz).date()
 
-# Map real calendar to simulation year
-delivery_day = pd.Timestamp(
-    YEAR,
-    today_real.month,
-    today_real.day
+# Day-ahead publication date (real calendar)
+real_delivery_day = today_real + pd.Timedelta(days=1)
+
+print(f"Publishing market results for: {real_delivery_day}")
+
+# ============================================================
+# Map Real Day → DATA_YEAR Day (seasonal replay)
+# ============================================================
+
+model_delivery_day = pd.Timestamp(
+    DATA_YEAR,
+    real_delivery_day.month,
+    real_delivery_day.day
 )
 
-# Day-ahead
-delivery_day += pd.Timedelta(days=1)
-
-# Handle Dec 31 wrap-around
-if delivery_day.year > YEAR:
-    delivery_day = pd.Timestamp(YEAR, 1, 1)
-
-print(f"Running day-ahead simulation for delivery date: {delivery_day}")
+# Handle leap mismatch safely
+if model_delivery_day.month == 2 and model_delivery_day.day == 29:
+    model_delivery_day = pd.Timestamp(DATA_YEAR, 2, 28)
 
 # ============================================================
-# Build network
+# Build Network (DATA YEAR)
 # ============================================================
 
-n_full = build_network(YEAR)
+n_full = build_network(DATA_YEAR)
 
 # ============================================================
-# Define rolling horizon
+# Define 48h Rolling Horizon (DATA YEAR)
 # ============================================================
 
-start = pd.Timestamp(delivery_day)
+start = model_delivery_day
 end = start + pd.Timedelta(hours=HORIZON_HOURS - 1)
 
 snapshots = n_full.snapshots[
@@ -110,13 +83,13 @@ snapshots = n_full.snapshots[
 ]
 
 if len(snapshots) == 0:
-    raise RuntimeError("No snapshots found for selected delivery date.")
+    raise RuntimeError("No snapshots found in DATA_YEAR for selected date.")
 
 n = n_full.copy()
 n.set_snapshots(snapshots)
 
 # ============================================================
-# Carry storage SOC from previous day if exists
+# Carry Storage SOC
 # ============================================================
 
 soc_file = "docs/out/last_soc.csv"
@@ -141,13 +114,33 @@ n.optimize(
 )
 
 # ============================================================
-# Publish first 24h
+# Publish First 24h (Convert Timestamp to REAL YEAR)
 # ============================================================
 
 price_pub = n.buses_t.marginal_price.iloc[:PUBLISH_HOURS]
 flow_pub = n.links_t.p0.iloc[:PUBLISH_HOURS] if len(n.links) else None
 
-date_str = delivery_day.strftime("%Y-%m-%d")
+# Convert DATA_YEAR timestamps → REAL YEAR timestamps
+real_index = [
+    pd.Timestamp(
+        real_delivery_day.year,
+        ts.month,
+        ts.day,
+        ts.hour
+    )
+    for ts in price_pub.index
+]
+
+price_pub.index = real_index
+
+if flow_pub is not None:
+    flow_pub.index = real_index
+
+# ============================================================
+# Export CSV
+# ============================================================
+
+date_str = real_delivery_day.strftime("%Y-%m-%d")
 
 price_path = f"docs/out/prices/{date_str}.csv"
 flow_path  = f"docs/out/flows/{date_str}.csv"
@@ -160,7 +153,7 @@ if flow_pub is not None:
 print(f"Published prices → {price_path}")
 
 # ============================================================
-# Save new SOC (end of published day)
+# Save New SOC (still DATA_YEAR internal)
 # ============================================================
 
 new_soc = n.stores_t.e.iloc[PUBLISH_HOURS - 1].copy()
@@ -168,12 +161,10 @@ new_soc.to_csv(soc_file)
 
 print("Saved updated SOC state.")
 
-print("Daily rolling simulation completed.")
-
 # ============================================================
 # Update index.json
 # ============================================================
-import json
+
 index_path = "docs/out/index.json"
 
 if os.path.exists(index_path):
@@ -187,13 +178,31 @@ filename = f"{date_str}.csv"
 if filename not in index["price_files"]:
     index["price_files"].append(filename)
 
-# sort newest first
 index["price_files"] = sorted(index["price_files"], reverse=True)
-
-# always keep correct soc file name
 index["soc_file"] = "last_soc.csv"
 
 with open(index_path, "w") as f:
     json.dump(index, f, indent=2)
 
 print("Updated index.json")
+print("Daily rolling simulation completed.")
+
+# ============================================================
+# Export Full PyPSA Network (.nc)
+# ============================================================
+
+# Use REAL publication date for naming
+date_str = real_delivery_day.strftime("%Y-%m-%d")
+
+nc_network_path = f"docs/out/network_{date_str}.nc"
+
+# This exports:
+# - all components
+# - solved dispatch
+# - marginal prices
+# - duals
+# - stores state
+# - links, generators, constraints, etc.
+n.export_to_netcdf(nc_network_path)
+
+print(f"Exported solved network → {nc_network_path}")

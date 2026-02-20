@@ -9,8 +9,8 @@ import pypsa
 pd.options.mode.string_storage = "python"
 
 import os
-os.makedirs("docs/data/prices", exist_ok=True)
-os.makedirs("docs/data/flows", exist_ok=True)
+os.makedirs("docs/out/prices", exist_ok=True)
+os.makedirs("docs/out/flows", exist_ok=True)
 
 from build_fuel_cost import build_marginal_cost
 
@@ -546,13 +546,13 @@ def solve_rolling_48h(year: int):
     
         date_str = price_pub.index[0].strftime("%Y-%m-%d")
         price_pub.to_csv(
-            f"docs/data/prices/{date_str}.csv",
+            f"docs/out/prices/{date_str}.csv",
             float_format="%.2f"
         )
         if len(n.links):
             flow_pub = n.links_t.p0.iloc[:publish_hours]
             flow_pub.to_csv(
-                f"docs/data/flows/{date_str}.csv",
+                f"docs/out/flows/{date_str}.csv",
                 float_format="%.2f"
             )
 
