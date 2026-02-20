@@ -145,6 +145,8 @@ date_str = real_delivery_day.strftime("%Y-%m-%d")
 price_path = f"docs/out/prices/{date_str}.csv"
 flow_path  = f"docs/out/flows/{date_str}.csv"
 
+price_pub.index = real_index
+price_pub.index.name = "snapshot"
 price_pub.to_csv(price_path, float_format="%.2f")
 
 if flow_pub is not None:

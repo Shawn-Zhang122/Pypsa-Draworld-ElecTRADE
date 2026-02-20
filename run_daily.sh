@@ -17,6 +17,6 @@ export GRB_LICENSE_FILE=$PWD/solver/gurobi.lic
 python model/run_daily.py
 
 # push results only if changed
-git add data/
+git add docs/out/
 git diff --cached --quiet || git commit -m "daily update $(date +%F)"
 git push
