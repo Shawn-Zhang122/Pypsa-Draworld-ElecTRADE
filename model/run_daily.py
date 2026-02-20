@@ -170,3 +170,30 @@ print("Saved updated SOC state.")
 
 print("Daily rolling simulation completed.")
 
+# ============================================================
+# Update index.json
+# ============================================================
+import json
+index_path = "docs/out/index.json"
+
+if os.path.exists(index_path):
+    with open(index_path, "r") as f:
+        index = json.load(f)
+else:
+    index = {"price_files": [], "soc_file": "last_soc.csv"}
+
+filename = f"{date_str}.csv"
+
+if filename not in index["price_files"]:
+    index["price_files"].append(filename)
+
+# sort newest first
+index["price_files"] = sorted(index["price_files"], reverse=True)
+
+# always keep correct soc file name
+index["soc_file"] = "last_soc.csv"
+
+with open(index_path, "w") as f:
+    json.dump(index, f, indent=2)
+
+print("Updated index.json")
