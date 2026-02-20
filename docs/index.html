@@ -19,7 +19,7 @@
     h2 { margin-top: 40px; color: #333; }
     #priceMap, #provinceCurve { height: 650px; background: white; border-radius: 8px; border: 1px solid #ddd; }
     #socChart { height: 600px; background: white; border-radius: 8px; border: 1px solid #ddd; margin-top: 20px; }
-    #error { color:red; margin-top:10px; font-weight: bold; padding: 10px; background: #ffeeee; border-radius: 4px; display: none; }
+    #error { color:red; margin-top:10px; font-weight: bold; }
 </style>
 </head>
 
@@ -48,20 +48,28 @@
 let mapInstance;
 let hoverPopup;
 
-/* ---------- Helper: Centroid for MultiPoint to fix duplicate circles ---------- */
+/* ---------- Helper: Centroid to fix duplicate circles in MultiPoint ---------- */
 function getCentroid(feature) {
     const geom = feature.geometry;
-    if (geom.type === 'Point') return geom.coordinates;
-    
     let coords = [];
-    if (geom.type === 'MultiPoint') coords = geom.coordinates;
-    else if (geom.type === 'Polygon') coords = geom.coordinates[0];
-    else if (geom.type === 'MultiPolygon') coords = geom.coordinates[0][0];
+    
+    if (geom.type === 'Point') {
+        coords = [geom.coordinates];
+    } else if (geom.type === 'MultiPoint') {
+        coords = geom.coordinates;
+    } else if (geom.type === 'Polygon') {
+        coords = geom.coordinates[0];
+    } else if (geom.type === 'MultiPolygon') {
+        coords = geom.coordinates[0][0];
+    }
 
-    if (coords.length === 0) return [104, 35]; // Fallback center
+    if (!coords || coords.length === 0) return [104, 35];
 
     let lon = 0, lat = 0;
-    coords.forEach(c => { lon += c[0]; lat += c[1]; });
+    coords.forEach(c => {
+        lon += c[0];
+        lat += c[1];
+    });
     return [lon / coords.length, lat / coords.length];
 }
 
@@ -72,38 +80,54 @@ async function loadCSV(url) {
     const text = await res.text();
     const rows = text.trim().split("\n");
     const headers = rows[0].replace(/^\uFEFF/, "").split(",");
+    
     return rows.slice(1).map(row => {
         const values = row.split(",");
-        return Object.fromEntries(headers.map((h,i) => [h.trim(), values[i]]));
+        const obj = {};
+        headers.forEach((h, i) => {
+            obj[h.trim()] = values[i] ? values[i].trim() : null;
+        });
+        return obj;
     });
 }
 
-/* ---------- MAIN ---------- */
+/* ---------- MAIN APP ---------- */
 async function loadApp() {
     try {
+        // 1. Fetch the index
         const config = await fetch("out/index.json").then(r => r.json());
 
-        // Target Date Logic: Seek the absolute latest file in the list 
-        // to ensure 02-21 is picked if it's the most recent data generated.
-        const sortedFiles = config.price_files.sort().reverse();
-        const targetFile = sortedFiles[0]; 
+        // 2. Select Latest Price File
+        // We sort the list of filenames to ensure the most recent date is at index 0
+        const priceFiles = config.price_files.slice().sort((a, b) => b.localeCompare(a));
+        const latestPriceFile = priceFiles[0];
         
-        console.log("Loading primary data file:", targetFile);
+        console.log("Found Price Files:", priceFiles);
+        console.log("Targeting Latest File:", latestPriceFile);
 
-        const priceData = await loadCSV("out/prices/" + targetFile);
+        const priceData = await loadCSV("out/prices/" + latestPriceFile);
+        
+        // 3. Process Columns (Excluding snapshot and battery/pumped storage)
         const columns = Object.keys(priceData[0]);
-        const provinces = columns.filter(c => c.trim() !== "snapshot" && !c.includes("__"));
+        const provinces = columns.filter(c => 
+            c !== "snapshot" && 
+            !c.toLowerCase().includes("__battery") && 
+            !c.toLowerCase().includes("__pumped")
+        );
+
         const timestamps = priceData.map(d => d.snapshot);
 
+        // Calculate 24h Avg per Province
         let avgPrice = {};
         provinces.forEach(zone => {
             const vals = priceData.map(d => Number(d[zone])).filter(v => !isNaN(v));
-            avgPrice[zone] = vals.length > 0 ? vals.reduce((a,b)=>a+b,0) / vals.length : 0;
+            avgPrice[zone] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
         });
 
+        // 4. Init Map
         initMap(avgPrice, priceData, timestamps);
 
-        // Load SOC
+        // 5. Load SOC Data
         const socData = await loadCSV("out/" + config.soc_file);
         Plotly.newPlot("socChart", [{
             x: socData.map(d => d.name),
@@ -111,37 +135,33 @@ async function loadApp() {
             type: "bar",
             marker: { color: '#2166ac' }
         }], {
-            title: `Final Storage SOC (${targetFile.replace('.csv','')})`,
+            title: `Final Storage SOC (${latestPriceFile.replace('.csv','')})`,
             xaxis: { title: "Storage Unit" },
             yaxis: { title: "Energy (MWh)" }
         });
 
     } catch (err) {
-        const errDiv = document.getElementById("error");
-        errDiv.style.display = "block";
-        errDiv.innerText = "Error: " + err.message;
+        document.getElementById("error").innerText = "Error: " + err.message;
         console.error(err);
     }
 }
 
-/* ---------- MAP ---------- */
+/* ---------- MAP COMPONENT ---------- */
 function initMap(avgPrice, data, timestamps) {
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
         style: "https://demotiles.maplibre.org/style.json",
         center: [105, 37],
-        zoom: 3.8
+        zoom: 3.5
     });
 
     mapInstance.on('load', async () => {
         const rawGeo = await fetch("geo/china_33nodes.geojson").then(r => r.json());
 
-        // Process features to ensure exactly ONE point per province record
+        // Flatten features to single Point geometry to prevent duplicate circles per province
         const processedFeatures = rawGeo.features.map(f => {
             const geoName = f.properties.name.trim();
-            // Try matching with price data
-            const matchKey = Object.keys(avgPrice).find(k => k.trim() === geoName);
-            const price = matchKey ? avgPrice[matchKey] : 0;
+            const price = avgPrice[geoName] || 0;
             
             return {
                 type: "Feature",
@@ -179,8 +199,8 @@ function initMap(avgPrice, data, timestamps) {
             layout: {
                 'text-field': ['get', 'name'],
                 'text-size': 11,
-                'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
-                'text-radial-offset': 1.2
+                'text-offset': [0, 2],
+                'text-anchor': 'top'
             },
             paint: {
                 'text-halo-color': '#fff',
@@ -194,7 +214,7 @@ function initMap(avgPrice, data, timestamps) {
             const p = e.features[0].properties;
             mapInstance.getCanvas().style.cursor = 'pointer';
             hoverPopup.setLngLat(e.lngLat)
-                .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(2)} RMB/MWh`)
+                .setHTML(`<b>${p.name}</b><br>24h Avg: ${p.price.toFixed(0)} RMB/MWh`)
                 .addTo(mapInstance);
         });
 
@@ -207,11 +227,14 @@ function initMap(avgPrice, data, timestamps) {
             showProvinceCurve(e.features[0].properties.name, data, timestamps);
         });
 
-        // Trigger initial curve for first feature
-        if(geo.features.length > 0) showProvinceCurve(geo.features[0].properties.name, data, timestamps);
+        // Initial curve
+        if(geo.features.length > 0) {
+            showProvinceCurve(geo.features[0].properties.name, data, timestamps);
+        }
     });
 }
 
+/* ---------- CHART COMPONENT ---------- */
 function showProvinceCurve(zone, data, timestamps) {
     Plotly.newPlot("provinceCurve", [{
         x: timestamps,
@@ -221,8 +244,8 @@ function showProvinceCurve(zone, data, timestamps) {
         line: { color: '#b2182b', width: 2 },
         marker: { size: 4 }
     }], {
-        title: `Hourly Price Profile: ${zone}`,
-        xaxis: { title: "Time (Snapshot)" },
+        title: `Price Profile: ${zone}`,
+        xaxis: { title: "Time" },
         yaxis: { title: "Price (RMB/MWh)" },
         margin: { t: 50, b: 50, l: 60, r: 30 }
     });
