@@ -56,7 +56,7 @@ async function loadCSV(url) {
     const rows = text.trim().split("\n");
 
     const headers = rows[0]
-        .replace(/^\uFEFF/, "")   // 🔥 remove BOM
+        .replace(/^\uFEFF/, "")   
         .split(",");
 
     return rows.slice(1).map(row => {
@@ -131,7 +131,9 @@ function initMap(avgPrice, data, timestamps) {
 
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
-        style: "https://demotiles.maplibre.org/style.json"
+        style: "https://demotiles.maplibre.org/style.json",
+        center: [104, 35],
+        zoom: 4
     });
 
     mapInstance.on('load', async () => {
@@ -139,30 +141,7 @@ function initMap(avgPrice, data, timestamps) {
         const geo = await fetch("geo/china_33nodes.geojson")
             .then(r => r.json());
 
-        /* ---------- SAFE BOUNDS (MultiPolygon only) ---------- */
-
-        const bounds = new maplibregl.LngLatBounds();
-
-        geo.features.forEach(feature => {
-            feature.geometry.coordinates.forEach(polygon => {
-                polygon.forEach(ring => {
-                    ring.forEach(coord => {
-                        if (
-                            Array.isArray(coord) &&
-                            coord.length === 2 &&
-                            typeof coord[0] === "number" &&
-                            typeof coord[1] === "number"
-                        ) {
-                            bounds.extend(coord);
-                        }
-                    });
-                });
-            });
-        });
-
-        mapInstance.fitBounds(bounds, { padding: 40 });
-
-        /* ---------- ATTACH PRICE (STRICT MATCH) ---------- */
+        /* ---------- ATTACH PRICE TO POINTS ---------- */
 
         geo.features.forEach(f => {
 
@@ -175,24 +154,37 @@ function initMap(avgPrice, data, timestamps) {
             const price = matchKey ? avgPrice[matchKey] : 0;
 
             f.properties.price = isFinite(price) ? price : 0;
-            f.properties.label = f.properties.price.toFixed(0);
         });
+
+        /* ---------- AUTO FIT BOUNDS (POINT SAFE) ---------- */
+
+        const bounds = new maplibregl.LngLatBounds();
+
+        geo.features.forEach(f => {
+            const coord = f.geometry.coordinates;
+            if (Array.isArray(coord) && coord.length === 2) {
+                bounds.extend(coord);
+            }
+        });
+
+        mapInstance.fitBounds(bounds, { padding: 60 });
 
         /* ---------- SOURCE ---------- */
 
-        mapInstance.addSource('provinces', {
+        mapInstance.addSource('nodes', {
             type: 'geojson',
             data: geo
         });
 
-        /* ---------- FILL ---------- */
+        /* ---------- CIRCLE LAYER ---------- */
 
         mapInstance.addLayer({
-            id: 'province-fill',
-            type: 'fill',
-            source: 'provinces',
+            id: 'node-circle',
+            type: 'circle',
+            source: 'nodes',
             paint: {
-                'fill-color': [
+                'circle-radius': 10,
+                'circle-color': [
                     'interpolate',
                     ['linear'],
                     ['get', 'price'],
@@ -200,31 +192,25 @@ function initMap(avgPrice, data, timestamps) {
                     200, '#f7f7f7',
                     400, '#b2182b'
                 ],
-                'fill-opacity': 0.75
-            }
-        });
-
-        /* ---------- BORDER ---------- */
-
-        mapInstance.addLayer({
-            id: 'province-border',
-            type: 'line',
-            source: 'provinces',
-            paint: {
-                'line-color': '#000',
-                'line-width': 1.2
+                'circle-stroke-width': 1.2,
+                'circle-stroke-color': '#000',
+                'circle-opacity': 0.9
             }
         });
 
         /* ---------- LABEL ---------- */
 
         mapInstance.addLayer({
-            id: 'province-label',
+            id: 'node-label',
             type: 'symbol',
-            source: 'provinces',
+            source: 'nodes',
             layout: {
-                'text-field': ['get', 'label'],
-                'text-size': 14
+                'text-field': ['concat',
+                    ['get', 'name'],
+                    '\n',
+                    ['to-string', ['round', ['get', 'price']]]
+                ],
+                'text-size': 12
             },
             paint: {
                 'text-color': '#000',
@@ -240,7 +226,7 @@ function initMap(avgPrice, data, timestamps) {
             closeOnClick: false
         });
 
-        mapInstance.on('mousemove', 'province-fill', e => {
+        mapInstance.on('mousemove', 'node-circle', e => {
             const p = e.features[0].properties;
             hoverPopup
                 .setLngLat(e.lngLat)
@@ -248,11 +234,11 @@ function initMap(avgPrice, data, timestamps) {
                 .addTo(mapInstance);
         });
 
-        mapInstance.on('mouseleave', 'province-fill', () => {
+        mapInstance.on('mouseleave', 'node-circle', () => {
             hoverPopup.remove();
         });
 
-        mapInstance.on('click', 'province-fill', e => {
+        mapInstance.on('click', 'node-circle', e => {
             const zone = e.features[0].properties.name;
             showProvinceCurve(zone, data, timestamps);
         });
