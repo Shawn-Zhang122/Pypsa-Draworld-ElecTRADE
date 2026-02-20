@@ -10,14 +10,15 @@
 <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 
 <style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 20px auto;
-    max-width: 1600px;
-}
-h2 { margin-top: 40px; }
-#priceMap, #provinceCurve { height: 650px; }
-#socChart { height: 600px; }
+    body {
+        font-family: Arial, sans-serif;
+        margin: 20px auto;
+        max-width: 1600px;
+    }
+    h2 { margin-top: 40px; }
+    #priceMap, #provinceCurve { height: 650px; border: 1px solid #ddd; border-radius: 4px; }
+    #socChart { height: 600px; border: 1px solid #ddd; border-radius: 4px; margin-top: 20px; }
+    #error { color: red; font-weight: bold; margin-top: 10px; }
 </style>
 </head>
 
@@ -39,7 +40,7 @@ h2 { margin-top: 40px; }
 <h2>Final Storage SOC</h2>
 <div id="socChart"></div>
 
-<div id="error" style="color:red;"></div>
+<div id="error"></div>
 
 <script>
 
@@ -62,7 +63,7 @@ async function loadCSV(url) {
     return rows.slice(1).map(row => {
         const values = row.split(",");
         return Object.fromEntries(
-            headers.map((h,i) => [h.trim(), values[i]])
+            headers.map((h, i) => [h.trim(), values[i]])
         );
     });
 }
@@ -70,57 +71,55 @@ async function loadCSV(url) {
 /* ---------- MAIN ---------- */
 
 async function loadApp() {
-
     try {
+        // 1. Load config to find latest data
+        const config = await fetch("out/index.json").then(r => {
+            if(!r.ok) throw new Error("out/index.json not found");
+            return r.json();
+        });
 
-        const config = await fetch("out/index.json")
-            .then(r => r.json());
-
-        const latestPrice =
-            config.price_files.sort().reverse()[0];
-
-        const priceData = await loadCSV(
-            "out/prices/" + latestPrice
-        );
+        const latestPriceFile = config.price_files.sort().reverse()[0];
+        
+        // 2. Load Price Data
+        const priceData = await loadCSV("out/prices/" + latestPriceFile);
 
         const columns = Object.keys(priceData[0]);
-
-        const provinces = columns.filter(c =>
+        const provinces = columns.filter(c => 
             c.trim() !== "snapshot" && !c.includes("__")
         );
 
         const timestamps = priceData.map(d => d.snapshot);
 
+        // Calculate 24h Averages
         let avgPrice = {};
-
         provinces.forEach(zone => {
             const vals = priceData.map(d => Number(d[zone]));
             const valid = vals.filter(v => !isNaN(v));
-            avgPrice[zone] =
-                valid.length > 0
-                    ? valid.reduce((a,b)=>a+b,0) / valid.length
-                    : 0;
+            avgPrice[zone] = valid.length > 0 
+                ? valid.reduce((a, b) => a + b, 0) / valid.length 
+                : 0;
         });
 
+        // 3. Initialize Map with calculated averages
         initMap(avgPrice, priceData, timestamps);
 
-        const socData = await loadCSV(
-            "out/" + config.soc_file
-        );
+        // 4. Load and Plot SOC Data
+        const socData = await loadCSV("out/" + config.soc_file);
 
         Plotly.newPlot("socChart", [{
             x: socData.map(d => d.name),
             y: socData.map(d => Number(Object.values(d)[1])),
-            type: "bar"
+            type: "bar",
+            marker: { color: '#2166ac' }
         }], {
             title: "Final Storage SOC",
             xaxis: { title: "Storage Unit" },
-            yaxis: { title: "Energy (MWh)" }
+            yaxis: { title: "Energy (MWh)" },
+            margin: { t: 50, b: 100 }
         });
 
     } catch (err) {
-        document.getElementById("error").innerText =
-            err.message;
+        document.getElementById("error").innerText = "App Initialization Error: " + err.message;
         console.error(err);
     }
 }
@@ -128,7 +127,6 @@ async function loadApp() {
 /* ---------- MAP ---------- */
 
 function initMap(avgPrice, data, timestamps) {
-
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
         style: "https://demotiles.maplibre.org/style.json",
@@ -137,53 +135,49 @@ function initMap(avgPrice, data, timestamps) {
     });
 
     mapInstance.on('load', async () => {
+        const geo = await fetch("geo/china_33nodes.geojson").then(r => {
+            if(!r.ok) throw new Error("geo/china_33nodes.geojson not found");
+            return r.json();
+        });
 
-        const geo = await fetch("geo/china_33nodes.geojson")
-            .then(r => r.json());
-
-        /* ---------- ATTACH PRICE TO POINTS ---------- */
-
+        /* ---------- ATTACH PRICE TO FEATURES ---------- */
         geo.features.forEach(f => {
-
             const geoName = f.properties.name.trim();
-
-            const matchKey = Object.keys(avgPrice).find(k =>
-                k.trim() === geoName
-            );
-
+            const matchKey = Object.keys(avgPrice).find(k => k.trim() === geoName);
             const price = matchKey ? avgPrice[matchKey] : 0;
-
             f.properties.price = isFinite(price) ? price : 0;
         });
 
-        /* ---------- AUTO FIT BOUNDS (POINT SAFE) ---------- */
-
+        /* ---------- AUTO FIT BOUNDS ---------- */
         const bounds = new maplibregl.LngLatBounds();
-
         geo.features.forEach(f => {
-            const coord = f.geometry.coordinates;
-            if (Array.isArray(coord) && coord.length === 2) {
-                bounds.extend(coord);
+            if (f.geometry.type === 'MultiPoint' || f.geometry.type === 'Point') {
+                const coords = f.geometry.type === 'Point' ? [f.geometry.coordinates] : f.geometry.coordinates;
+                coords.forEach(pt => bounds.extend(pt));
+            } else if (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') {
+                // Handling polygon bounds if necessary
+                const flat = f.geometry.coordinates.flat(Infinity);
+                for(let i=0; i<flat.length; i+=2) bounds.extend([flat[i], flat[i+1]]);
             }
         });
 
-        mapInstance.fitBounds(bounds, { padding: 60 });
+        if (!bounds.isEmpty()) {
+            mapInstance.fitBounds(bounds, { padding: 60 });
+        }
 
         /* ---------- SOURCE ---------- */
-
         mapInstance.addSource('nodes', {
             type: 'geojson',
             data: geo
         });
 
         /* ---------- CIRCLE LAYER ---------- */
-
         mapInstance.addLayer({
             id: 'node-circle',
             type: 'circle',
             source: 'nodes',
             paint: {
-                'circle-radius': 10,
+                'circle-radius': 12,
                 'circle-color': [
                     'interpolate',
                     ['linear'],
@@ -192,25 +186,27 @@ function initMap(avgPrice, data, timestamps) {
                     200, '#f7f7f7',
                     400, '#b2182b'
                 ],
-                'circle-stroke-width': 1.2,
+                'circle-stroke-width': 1.5,
                 'circle-stroke-color': '#000',
                 'circle-opacity': 0.9
             }
         });
 
         /* ---------- LABEL ---------- */
-
         mapInstance.addLayer({
             id: 'node-label',
             type: 'symbol',
             source: 'nodes',
             layout: {
-                'text-field': ['concat',
+                'text-field': [
+                    'concat',
                     ['get', 'name'],
                     '\n',
                     ['to-string', ['round', ['get', 'price']]]
                 ],
-                'text-size': 12
+                'text-size': 11,
+                'text-offset': [0, 1.5],
+                'text-anchor': 'top'
             },
             paint: {
                 'text-color': '#000',
@@ -219,22 +215,20 @@ function initMap(avgPrice, data, timestamps) {
             }
         });
 
-        /* ---------- POPUP ---------- */
-
-        hoverPopup = new maplibregl.Popup({
-            closeButton: false,
-            closeOnClick: false
-        });
+        /* ---------- POPUP & INTERACTION ---------- */
+        hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
 
         mapInstance.on('mousemove', 'node-circle', e => {
+            mapInstance.getCanvas().style.cursor = 'pointer';
             const p = e.features[0].properties;
             hoverPopup
                 .setLngLat(e.lngLat)
-                .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(1)}`)
+                .setHTML(`<b>${p.name}</b><br>Avg Price: ${p.price.toFixed(1)}`)
                 .addTo(mapInstance);
         });
 
         mapInstance.on('mouseleave', 'node-circle', () => {
+            mapInstance.getCanvas().style.cursor = '';
             hoverPopup.remove();
         });
 
@@ -243,28 +237,33 @@ function initMap(avgPrice, data, timestamps) {
             showProvinceCurve(zone, data, timestamps);
         });
 
+        // Trigger initial curve for the first available province
+        const firstNode = geo.features[0].properties.name;
+        showProvinceCurve(firstNode, data, timestamps);
     });
 }
 
 /* ---------- CURVE ---------- */
 
 function showProvinceCurve(zone, data, timestamps) {
-
     Plotly.newPlot("provinceCurve", [{
         x: timestamps,
         y: data.map(d => Number(d[zone])),
         mode: "lines+markers",
-        name: zone
+        name: zone,
+        line: { color: '#b2182b', width: 2 },
+        marker: { size: 5 }
     }], {
-        title: zone + " — Hourly Price",
-        xaxis: { title: "Time" },
-        yaxis: { title: "Price (€/MWh)" }
+        title: zone + " — Hourly Price Profile",
+        xaxis: { title: "Snapshot Time" },
+        yaxis: { title: "Price (€/MWh)" },
+        margin: { t: 50, b: 50, l: 60, r: 30 }
     });
 
-    document.getElementById("curveTitle").innerText =
-        "Hourly Price — " + zone;
+    document.getElementById("curveTitle").innerText = "Hourly Price — " + zone;
 }
 
+// Start Application
 loadApp();
 
 </script>
