@@ -10,16 +10,16 @@
 <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 
 <style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 20px auto;
-    max-width: 1600px;
-    background-color: #fcfcfc;
-}
-h2 { margin-top: 40px; color: #333; }
-#priceMap, #provinceCurve { height: 650px; background: white; border-radius: 8px; border: 1px solid #ddd; }
-#socChart { height: 600px; background: white; border-radius: 8px; border: 1px solid #ddd; margin-top: 20px; }
-#error { color:red; margin-top:10px; font-weight: bold; }
+    body {
+        font-family: Arial, sans-serif;
+        margin: 20px auto;
+        max-width: 1600px;
+        background-color: #fcfcfc;
+    }
+    h2 { margin-top: 40px; color: #333; }
+    #priceMap, #provinceCurve { height: 650px; background: white; border-radius: 8px; border: 1px solid #ddd; }
+    #socChart { height: 600px; background: white; border-radius: 8px; border: 1px solid #ddd; margin-top: 20px; }
+    #error { color:red; margin-top:10px; font-weight: bold; padding: 10px; background: #ffeeee; border-radius: 4px; display: none; }
 </style>
 </head>
 
@@ -48,17 +48,21 @@ h2 { margin-top: 40px; color: #333; }
 let mapInstance;
 let hoverPopup;
 
-/* ---------- Helper: Geographic Centroid to avoid duplicate circles ---------- */
+/* ---------- Helper: Centroid for MultiPoint to fix duplicate circles ---------- */
 function getCentroid(feature) {
-    let coords = feature.geometry.coordinates;
-    // Flatten MultiPoint/Polygon coordinates
-    if (feature.geometry.type === 'MultiPoint') {
-        let lon = 0, lat = 0;
-        coords.forEach(c => { lon += c[0]; lat += c[1]; });
-        return [lon / coords.length, lat / coords.length];
-    }
-    // Fallback for simple Point
-    return coords;
+    const geom = feature.geometry;
+    if (geom.type === 'Point') return geom.coordinates;
+    
+    let coords = [];
+    if (geom.type === 'MultiPoint') coords = geom.coordinates;
+    else if (geom.type === 'Polygon') coords = geom.coordinates[0];
+    else if (geom.type === 'MultiPolygon') coords = geom.coordinates[0][0];
+
+    if (coords.length === 0) return [104, 35]; // Fallback center
+
+    let lon = 0, lat = 0;
+    coords.forEach(c => { lon += c[0]; lat += c[1]; });
+    return [lon / coords.length, lat / coords.length];
 }
 
 /* ---------- CSV Loader (BOM SAFE) ---------- */
@@ -79,19 +83,12 @@ async function loadApp() {
     try {
         const config = await fetch("out/index.json").then(r => r.json());
 
-        // Logic: Calculate Day-Ahead Date (Tomorrow)
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const dateStr = tomorrow.toISOString().split('T')[0]; // YYYY-MM-DD
+        // Target Date Logic: Seek the absolute latest file in the list 
+        // to ensure 02-21 is picked if it's the most recent data generated.
+        const sortedFiles = config.price_files.sort().reverse();
+        const targetFile = sortedFiles[0]; 
         
-        // Find match for tomorrow, otherwise take the absolute latest file
-        let targetFile = config.price_files.find(f => f.includes(dateStr));
-        if (!targetFile) {
-            targetFile = config.price_files.sort().reverse()[0];
-            console.log("Day-ahead data not found, loading latest available:", targetFile);
-        } else {
-            console.log("Loading Day-Ahead data:", targetFile);
-        }
+        console.log("Loading primary data file:", targetFile);
 
         const priceData = await loadCSV("out/prices/" + targetFile);
         const columns = Object.keys(priceData[0]);
@@ -114,13 +111,15 @@ async function loadApp() {
             type: "bar",
             marker: { color: '#2166ac' }
         }], {
-            title: "Final Storage SOC (" + targetFile.replace('.csv','') + ")",
+            title: `Final Storage SOC (${targetFile.replace('.csv','')})`,
             xaxis: { title: "Storage Unit" },
             yaxis: { title: "Energy (MWh)" }
         });
 
     } catch (err) {
-        document.getElementById("error").innerText = err.message;
+        const errDiv = document.getElementById("error");
+        errDiv.style.display = "block";
+        errDiv.innerText = "Error: " + err.message;
         console.error(err);
     }
 }
@@ -130,17 +129,19 @@ function initMap(avgPrice, data, timestamps) {
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
         style: "https://demotiles.maplibre.org/style.json",
-        center: [104, 35],
-        zoom: 3.5
+        center: [105, 37],
+        zoom: 3.8
     });
 
     mapInstance.on('load', async () => {
         const rawGeo = await fetch("geo/china_33nodes.geojson").then(r => r.json());
 
-        // Process GeoJSON: Convert MultiPoint to a single Point feature to fix duplicate circles
+        // Process features to ensure exactly ONE point per province record
         const processedFeatures = rawGeo.features.map(f => {
             const geoName = f.properties.name.trim();
-            const price = avgPrice[geoName] || 0;
+            // Try matching with price data
+            const matchKey = Object.keys(avgPrice).find(k => k.trim() === geoName);
+            const price = matchKey ? avgPrice[matchKey] : 0;
             
             return {
                 type: "Feature",
@@ -161,10 +162,10 @@ function initMap(avgPrice, data, timestamps) {
             type: 'circle',
             source: 'nodes',
             paint: {
-                'circle-radius': 14,
+                'circle-radius': 15,
                 'circle-color': [
                     'interpolate', ['linear'], ['get', 'price'],
-                    0, '#2166ac', 200, '#f7f7f7', 400, '#b2182b'
+                    0, '#2166ac', 150, '#f7f7f7', 300, '#b2182b'
                 ],
                 'circle-stroke-width': 2,
                 'circle-stroke-color': '#fff'
@@ -177,9 +178,9 @@ function initMap(avgPrice, data, timestamps) {
             source: 'nodes',
             layout: {
                 'text-field': ['get', 'name'],
-                'text-size': 12,
-                'text-offset': [0, 2],
-                'text-anchor': 'top'
+                'text-size': 11,
+                'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
+                'text-radial-offset': 1.2
             },
             paint: {
                 'text-halo-color': '#fff',
@@ -193,7 +194,7 @@ function initMap(avgPrice, data, timestamps) {
             const p = e.features[0].properties;
             mapInstance.getCanvas().style.cursor = 'pointer';
             hoverPopup.setLngLat(e.lngLat)
-                .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(1)}`)
+                .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(2)} RMB/MWh`)
                 .addTo(mapInstance);
         });
 
@@ -206,7 +207,7 @@ function initMap(avgPrice, data, timestamps) {
             showProvinceCurve(e.features[0].properties.name, data, timestamps);
         });
 
-        // Default selection
+        // Trigger initial curve for first feature
         if(geo.features.length > 0) showProvinceCurve(geo.features[0].properties.name, data, timestamps);
     });
 }
@@ -217,11 +218,13 @@ function showProvinceCurve(zone, data, timestamps) {
         y: data.map(d => Number(d[zone])),
         mode: "lines+markers",
         name: zone,
-        line: { color: '#b2182b' }
+        line: { color: '#b2182b', width: 2 },
+        marker: { size: 4 }
     }], {
-        title: zone + " — Hourly Price Profile",
-        xaxis: { title: "Time" },
-        yaxis: { title: "Price (€/MWh)" }
+        title: `Hourly Price Profile: ${zone}`,
+        xaxis: { title: "Time (Snapshot)" },
+        yaxis: { title: "Price (RMB/MWh)" },
+        margin: { t: 50, b: 50, l: 60, r: 30 }
     });
     document.getElementById("curveTitle").innerText = "Hourly Price — " + zone;
 }
