@@ -10,15 +10,16 @@
 <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        margin: 20px auto;
-        max-width: 1600px;
-    }
-    h2 { margin-top: 40px; }
-    #priceMap, #provinceCurve { height: 650px; border: 1px solid #ddd; border-radius: 4px; }
-    #socChart { height: 600px; border: 1px solid #ddd; border-radius: 4px; margin-top: 20px; }
-    #error { color: red; font-weight: bold; margin-top: 10px; }
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px auto;
+    max-width: 1600px;
+    background-color: #fcfcfc;
+}
+h2 { margin-top: 40px; color: #333; }
+#priceMap, #provinceCurve { height: 650px; background: white; border-radius: 8px; border: 1px solid #ddd; }
+#socChart { height: 600px; background: white; border-radius: 8px; border: 1px solid #ddd; margin-top: 20px; }
+#error { color:red; margin-top:10px; font-weight: bold; }
 </style>
 </head>
 
@@ -47,183 +48,152 @@
 let mapInstance;
 let hoverPopup;
 
-/* ---------- CSV Loader (BOM SAFE) ---------- */
+/* ---------- Helper: Geographic Centroid to avoid duplicate circles ---------- */
+function getCentroid(feature) {
+    let coords = feature.geometry.coordinates;
+    // Flatten MultiPoint/Polygon coordinates
+    if (feature.geometry.type === 'MultiPoint') {
+        let lon = 0, lat = 0;
+        coords.forEach(c => { lon += c[0]; lat += c[1]; });
+        return [lon / coords.length, lat / coords.length];
+    }
+    // Fallback for simple Point
+    return coords;
+}
 
+/* ---------- CSV Loader (BOM SAFE) ---------- */
 async function loadCSV(url) {
     const res = await fetch(url);
-    if (!res.ok) throw new Error("CSV not found: " + url);
-
+    if (!res.ok) throw new Error("File not found: " + url);
     const text = await res.text();
     const rows = text.trim().split("\n");
-
-    const headers = rows[0]
-        .replace(/^\uFEFF/, "")   
-        .split(",");
-
+    const headers = rows[0].replace(/^\uFEFF/, "").split(",");
     return rows.slice(1).map(row => {
         const values = row.split(",");
-        return Object.fromEntries(
-            headers.map((h, i) => [h.trim(), values[i]])
-        );
+        return Object.fromEntries(headers.map((h,i) => [h.trim(), values[i]]));
     });
 }
 
 /* ---------- MAIN ---------- */
-
 async function loadApp() {
     try {
-        // 1. Load config to find latest data
-        const config = await fetch("out/index.json").then(r => {
-            if(!r.ok) throw new Error("out/index.json not found");
-            return r.json();
-        });
+        const config = await fetch("out/index.json").then(r => r.json());
 
-        const latestPriceFile = config.price_files.sort().reverse()[0];
+        // Logic: Calculate Day-Ahead Date (Tomorrow)
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const dateStr = tomorrow.toISOString().split('T')[0]; // YYYY-MM-DD
         
-        // 2. Load Price Data
-        const priceData = await loadCSV("out/prices/" + latestPriceFile);
+        // Find match for tomorrow, otherwise take the absolute latest file
+        let targetFile = config.price_files.find(f => f.includes(dateStr));
+        if (!targetFile) {
+            targetFile = config.price_files.sort().reverse()[0];
+            console.log("Day-ahead data not found, loading latest available:", targetFile);
+        } else {
+            console.log("Loading Day-Ahead data:", targetFile);
+        }
 
+        const priceData = await loadCSV("out/prices/" + targetFile);
         const columns = Object.keys(priceData[0]);
-        const provinces = columns.filter(c => 
-            c.trim() !== "snapshot" && !c.includes("__")
-        );
-
+        const provinces = columns.filter(c => c.trim() !== "snapshot" && !c.includes("__"));
         const timestamps = priceData.map(d => d.snapshot);
 
-        // Calculate 24h Averages
         let avgPrice = {};
         provinces.forEach(zone => {
-            const vals = priceData.map(d => Number(d[zone]));
-            const valid = vals.filter(v => !isNaN(v));
-            avgPrice[zone] = valid.length > 0 
-                ? valid.reduce((a, b) => a + b, 0) / valid.length 
-                : 0;
+            const vals = priceData.map(d => Number(d[zone])).filter(v => !isNaN(v));
+            avgPrice[zone] = vals.length > 0 ? vals.reduce((a,b)=>a+b,0) / vals.length : 0;
         });
 
-        // 3. Initialize Map with calculated averages
         initMap(avgPrice, priceData, timestamps);
 
-        // 4. Load and Plot SOC Data
+        // Load SOC
         const socData = await loadCSV("out/" + config.soc_file);
-
         Plotly.newPlot("socChart", [{
             x: socData.map(d => d.name),
             y: socData.map(d => Number(Object.values(d)[1])),
             type: "bar",
             marker: { color: '#2166ac' }
         }], {
-            title: "Final Storage SOC",
+            title: "Final Storage SOC (" + targetFile.replace('.csv','') + ")",
             xaxis: { title: "Storage Unit" },
-            yaxis: { title: "Energy (MWh)" },
-            margin: { t: 50, b: 100 }
+            yaxis: { title: "Energy (MWh)" }
         });
 
     } catch (err) {
-        document.getElementById("error").innerText = "App Initialization Error: " + err.message;
+        document.getElementById("error").innerText = err.message;
         console.error(err);
     }
 }
 
 /* ---------- MAP ---------- */
-
 function initMap(avgPrice, data, timestamps) {
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
         style: "https://demotiles.maplibre.org/style.json",
         center: [104, 35],
-        zoom: 4
+        zoom: 3.5
     });
 
     mapInstance.on('load', async () => {
-        const geo = await fetch("geo/china_33nodes.geojson").then(r => {
-            if(!r.ok) throw new Error("geo/china_33nodes.geojson not found");
-            return r.json();
-        });
+        const rawGeo = await fetch("geo/china_33nodes.geojson").then(r => r.json());
 
-        /* ---------- ATTACH PRICE TO FEATURES ---------- */
-        geo.features.forEach(f => {
+        // Process GeoJSON: Convert MultiPoint to a single Point feature to fix duplicate circles
+        const processedFeatures = rawGeo.features.map(f => {
             const geoName = f.properties.name.trim();
-            const matchKey = Object.keys(avgPrice).find(k => k.trim() === geoName);
-            const price = matchKey ? avgPrice[matchKey] : 0;
-            f.properties.price = isFinite(price) ? price : 0;
+            const price = avgPrice[geoName] || 0;
+            
+            return {
+                type: "Feature",
+                properties: { ...f.properties, price: isFinite(price) ? price : 0 },
+                geometry: {
+                    type: "Point",
+                    coordinates: getCentroid(f)
+                }
+            };
         });
 
-        /* ---------- AUTO FIT BOUNDS ---------- */
-        const bounds = new maplibregl.LngLatBounds();
-        geo.features.forEach(f => {
-            if (f.geometry.type === 'MultiPoint' || f.geometry.type === 'Point') {
-                const coords = f.geometry.type === 'Point' ? [f.geometry.coordinates] : f.geometry.coordinates;
-                coords.forEach(pt => bounds.extend(pt));
-            } else if (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') {
-                // Handling polygon bounds if necessary
-                const flat = f.geometry.coordinates.flat(Infinity);
-                for(let i=0; i<flat.length; i+=2) bounds.extend([flat[i], flat[i+1]]);
-            }
-        });
+        const geo = { type: "FeatureCollection", features: processedFeatures };
 
-        if (!bounds.isEmpty()) {
-            mapInstance.fitBounds(bounds, { padding: 60 });
-        }
+        mapInstance.addSource('nodes', { type: 'geojson', data: geo });
 
-        /* ---------- SOURCE ---------- */
-        mapInstance.addSource('nodes', {
-            type: 'geojson',
-            data: geo
-        });
-
-        /* ---------- CIRCLE LAYER ---------- */
         mapInstance.addLayer({
             id: 'node-circle',
             type: 'circle',
             source: 'nodes',
             paint: {
-                'circle-radius': 12,
+                'circle-radius': 14,
                 'circle-color': [
-                    'interpolate',
-                    ['linear'],
-                    ['get', 'price'],
-                    0, '#2166ac',
-                    200, '#f7f7f7',
-                    400, '#b2182b'
+                    'interpolate', ['linear'], ['get', 'price'],
+                    0, '#2166ac', 200, '#f7f7f7', 400, '#b2182b'
                 ],
-                'circle-stroke-width': 1.5,
-                'circle-stroke-color': '#000',
-                'circle-opacity': 0.9
+                'circle-stroke-width': 2,
+                'circle-stroke-color': '#fff'
             }
         });
 
-        /* ---------- LABEL ---------- */
         mapInstance.addLayer({
             id: 'node-label',
             type: 'symbol',
             source: 'nodes',
             layout: {
-                'text-field': [
-                    'concat',
-                    ['get', 'name'],
-                    '\n',
-                    ['to-string', ['round', ['get', 'price']]]
-                ],
-                'text-size': 11,
-                'text-offset': [0, 1.5],
+                'text-field': ['get', 'name'],
+                'text-size': 12,
+                'text-offset': [0, 2],
                 'text-anchor': 'top'
             },
             paint: {
-                'text-color': '#000',
                 'text-halo-color': '#fff',
                 'text-halo-width': 1.5
             }
         });
 
-        /* ---------- POPUP & INTERACTION ---------- */
         hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
 
         mapInstance.on('mousemove', 'node-circle', e => {
-            mapInstance.getCanvas().style.cursor = 'pointer';
             const p = e.features[0].properties;
-            hoverPopup
-                .setLngLat(e.lngLat)
-                .setHTML(`<b>${p.name}</b><br>Avg Price: ${p.price.toFixed(1)}`)
+            mapInstance.getCanvas().style.cursor = 'pointer';
+            hoverPopup.setLngLat(e.lngLat)
+                .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(1)}`)
                 .addTo(mapInstance);
         });
 
@@ -233,17 +203,13 @@ function initMap(avgPrice, data, timestamps) {
         });
 
         mapInstance.on('click', 'node-circle', e => {
-            const zone = e.features[0].properties.name;
-            showProvinceCurve(zone, data, timestamps);
+            showProvinceCurve(e.features[0].properties.name, data, timestamps);
         });
 
-        // Trigger initial curve for the first available province
-        const firstNode = geo.features[0].properties.name;
-        showProvinceCurve(firstNode, data, timestamps);
+        // Default selection
+        if(geo.features.length > 0) showProvinceCurve(geo.features[0].properties.name, data, timestamps);
     });
 }
-
-/* ---------- CURVE ---------- */
 
 function showProvinceCurve(zone, data, timestamps) {
     Plotly.newPlot("provinceCurve", [{
@@ -251,21 +217,16 @@ function showProvinceCurve(zone, data, timestamps) {
         y: data.map(d => Number(d[zone])),
         mode: "lines+markers",
         name: zone,
-        line: { color: '#b2182b', width: 2 },
-        marker: { size: 5 }
+        line: { color: '#b2182b' }
     }], {
         title: zone + " — Hourly Price Profile",
-        xaxis: { title: "Snapshot Time" },
-        yaxis: { title: "Price (€/MWh)" },
-        margin: { t: 50, b: 50, l: 60, r: 30 }
+        xaxis: { title: "Time" },
+        yaxis: { title: "Price (€/MWh)" }
     });
-
     document.getElementById("curveTitle").innerText = "Hourly Price — " + zone;
 }
 
-// Start Application
 loadApp();
-
 </script>
 
 </body>
