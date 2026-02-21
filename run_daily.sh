@@ -18,5 +18,8 @@ python model/run_daily.py
 
 # push results only if changed
 git add docs/out/
-git diff --cached --quiet || git commit -m "daily update $(date +%F)"
-git push
+
+if ! git diff --cached --quiet; then
+    git commit -m "daily update $(date +%F)"
+    git push origin main
+fi

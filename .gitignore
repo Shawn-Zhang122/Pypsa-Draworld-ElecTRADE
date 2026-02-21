@@ -3,10 +3,12 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.log
 
 # Environments
 .env
 .venv
+.yml
 env/
 venv/
 solver/
@@ -17,6 +19,7 @@ docs/index-Demo-Test.html
 *.nc
 *.h5
 *.hdf5
+*.sh
 
 # Solver / temp
 gurobi.log
