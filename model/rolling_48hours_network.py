@@ -9,6 +9,7 @@ import pypsa
 pd.options.mode.string_storage = "python"
 
 import os
+from pathlib import Path
 os.makedirs("docs/out/prices", exist_ok=True)
 os.makedirs("docs/out/flows", exist_ok=True)
 
@@ -21,6 +22,9 @@ from build_fuel_cost import build_marginal_cost
 YEAR = 2025
 HORIZON_HOURS = 48
 STEP_HOURS = 24
+
+# Get the directory where the script is located, to be cleaned..by Shuwei, FEb.25
+#ASE_DIR = Path(__file__).resolve().parent.parent
 
 LOAD_CSV   = "data/inputs/Load/Load_NDRC_BAs_China_Draworld_normalised_2025compiled.csv"
 EDGES_CSV  = "data/inputs/Network/edges_33nodes_500kVplus_updates_Jan2026.csv"
