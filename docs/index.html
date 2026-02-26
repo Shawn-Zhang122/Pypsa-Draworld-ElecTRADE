@@ -234,6 +234,14 @@ function initMap(avgPrice, data, timestamps) {
                     coordinates: getCentroid(f)
                 }
             };
+        
+        if (geo.features.length > 0) {
+            // Try to find Guangdong in the GeoJSON features
+            const defaultNode = geo.features.find(f => f.properties.name === "Guangdong") 
+                            || geo.features[0]; // Fallback to first if not found
+            
+            showProvinceCurve(defaultNode.properties.name, data, timestamps);
+            }
         });
 
         const geo = { type: "FeatureCollection", features: processedFeatures };
