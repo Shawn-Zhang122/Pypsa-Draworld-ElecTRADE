@@ -54,11 +54,7 @@
     <div id="beijing-clock" class="time-chip">Loading Beijing Time...</div>
 </div>
 
-    .subtitle {
-        font-size: 14px;
-        color: #666;
-        margin-bottom: 25px;
-    }
+<style>
 
     h2 { margin-top: 40px; color: #333; }
 
@@ -96,12 +92,11 @@
         box-shadow:0 0 4px rgba(0,0,0,0.15);
     }
 </style>
-</head>
 
+</head>
 <body>
 
 <h1>China ElecTRADE — Daily Results (t+1) </h1>
-<div id="beijing-clock" class="time-chip">Syncing Beijing Time...</div>
 <div class="subtitle">
 Rolling 48h dispatch | 33-node zonal pricing | Automated publication
 </div>
@@ -339,7 +334,7 @@ function updateBeijingTime() {
         hour12: false,
         month: '2-digit',
         day: '2-digit',
-        weekday: 'short',
+        weekday: 'long',
         year: 'numeric'
     };
 
@@ -348,7 +343,7 @@ function updateBeijingTime() {
     const p = {};
     parts.forEach(part => p[part.type] = part.value);
     
-    const displayStr = `Current time: ${p.hour}:00, ${p.month}-${p.day} (${p.weekday}), ${p.year}`;
+    const displayStr = `Current UTC+8 Beijing Time: ${p.hour}:00, ${p.month}-${p.day} (${p.weekday}), ${p.year}`;
     document.getElementById('beijing-clock').innerText = displayStr;
 
     const nextHour = new Date();
