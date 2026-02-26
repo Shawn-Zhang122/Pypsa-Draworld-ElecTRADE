@@ -220,7 +220,6 @@ function initMap(avgPrice, data, timestamps) {
     });
 
     mapInstance.on('load', async () => {
-
         const rawGeo = await fetch("geo/china_33nodes.geojson").then(r => r.json());
 
         const processedFeatures = rawGeo.features.map(f => {
@@ -234,15 +233,7 @@ function initMap(avgPrice, data, timestamps) {
                     coordinates: getCentroid(f)
                 }
             };
-        
-        if (geo.features.length > 0) {
-            // Try to find Guangdong in the GeoJSON features
-            const defaultNode = geo.features.find(f => f.properties.name === "Guangdong") 
-                            || geo.features[0]; // Fallback to first if not found
-            
-            showProvinceCurve(defaultNode.properties.name, data, timestamps);
-            }
-        });
+        }); // Close map function properly
 
         const geo = { type: "FeatureCollection", features: processedFeatures };
 
@@ -308,8 +299,11 @@ function initMap(avgPrice, data, timestamps) {
             showProvinceCurve(e.features[0].properties.name, data, timestamps);
         });
 
-        if(geo.features.length > 0) {
-            showProvinceCurve(geo.features[0].properties.name, data, timestamps);
+        // --- FIXED DEFAULT LOGIC ---
+        if (geo.features.length > 0) {
+            // Find Guangdong or fallback to first node
+            const defaultNode = geo.features.find(f => f.properties.name === "Guangdong") || geo.features[0];
+            showProvinceCurve(defaultNode.properties.name, data, timestamps);
         }
     });
 }
