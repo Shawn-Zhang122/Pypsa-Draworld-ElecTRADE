@@ -332,6 +332,7 @@ function updateBeijingTime() {
         timeZone: 'Asia/Shanghai',
         hour: '2-digit',
         hour12: false,
+        minute: '2-digit',
         month: '2-digit',
         day: '2-digit',
         weekday: 'long',
@@ -343,7 +344,7 @@ function updateBeijingTime() {
     const p = {};
     parts.forEach(part => p[part.type] = part.value);
     
-    const displayStr = `Current UTC+8 Beijing Time: ${p.hour}:00, ${p.month}-${p.day} (${p.weekday}), ${p.year}`;
+    const displayStr = `Current UTC+8 Beijing Time: ${p.hour}:${p.minute}, ${p.month}-${p.day} (${p.weekday}), ${p.year}`;
     document.getElementById('beijing-clock').innerText = displayStr;
 
     const nextHour = new Date();
