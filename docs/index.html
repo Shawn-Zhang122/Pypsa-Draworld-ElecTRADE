@@ -22,6 +22,38 @@
         font-weight: 600;
     }
 
+    /* ... existing styles ... */
+    .status-bar {
+        background: #f8f9fa;
+        border-left: 4px solid #2166ac;
+        padding: 12px 20px;
+        margin-bottom: 25px;
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 14px;
+        border: 1px solid #e9ecef;
+    }
+    .time-chip {
+        font-weight: 700;
+        color: #b2182b;
+        background: #fff;
+        padding: 5px 10px;
+        border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+</style>
+
+<div class="status-bar">
+    <span>
+        <span style="color:#666;">Data Status:</span> 
+        <strong style="color:green;">● Live</strong> | 33-Node Zonal Dispatch
+    </span>
+    <div id="beijing-clock" class="time-chip">Loading Beijing Time...</div>
+</div>
+
     .subtitle {
         font-size: 14px;
         color: #666;
@@ -69,6 +101,7 @@
 <body>
 
 <h1>China ElecTRADE — Daily Results (t+1) </h1>
+<div id="beijing-clock" class="time-chip">Syncing Beijing Time...</div>
 <div class="subtitle">
 Rolling 48h dispatch | 33-node zonal pricing | Automated publication
 </div>
@@ -296,7 +329,40 @@ function showProvinceCurve(zone, data, timestamps) {
     document.getElementById("curveTitle").innerText = "Hourly Price — " + zone;
 }
 
+/* ---------- HOURLY BEIJING CLOCK ---------- */
+function updateBeijingTime() {
+    const now = new Date();
+    
+    const options = {
+        timeZone: 'Asia/Shanghai',
+        hour: '2-digit',
+        hour12: false,
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'short',
+        year: 'numeric'
+    };
+
+    const formatter = new Intl.DateTimeFormat('en-GB', options);
+    const parts = formatter.formatToParts(now);
+    const p = {};
+    parts.forEach(part => p[part.type] = part.value);
+    
+    const displayStr = `Current time: ${p.hour}:00, ${p.month}-${p.day} (${p.weekday}), ${p.year}`;
+    document.getElementById('beijing-clock').innerText = displayStr;
+
+    const nextHour = new Date();
+    nextHour.setHours(now.getHours() + 1, 0, 0, 0);
+    const msUntilNextHour = nextHour - now;
+
+    setTimeout(updateBeijingTime, msUntilNextHour);
+}
+
+// Initial call to start the clock
+updateBeijingTime();
+
 loadApp();
+
 </script>
 
 </body>
