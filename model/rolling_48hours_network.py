@@ -24,15 +24,17 @@ HORIZON_HOURS = 48
 STEP_HOURS = 24
 
 # Get the directory where the script is located, to be cleaned..by Shuwei, FEb.25
-#ASE_DIR = Path(__file__).resolve().parent.parent
+# BASE_DIR = Path(__file__).resolve().parent.parent
 
 LOAD_CSV   = "data/inputs/Load/Load_NDRC_BAs_China_Draworld_normalised_2025compiled.csv"
 EDGES_CSV  = "data/inputs/Network/edges_33nodes_500kVplus_updates_Jan2026.csv"
 GEN_CSV    = "data/inputs/Generator/generators_units.csv"
 
 ONWIND_CSV  = "data/inputs/REprofile/ninja_wind_29.0000_120.0000.csv"
+# to be updated by Shuwei, Feb.25, 2026, with the latest data from NINJA (2025 compiled)
 OFFWIND_CSV = "data/inputs/REprofile/ninja_wind_29.0000_120.0000.csv"
 SOLAR_CSV   = "data/inputs/REprofile/ninja_pv_29.0000_120.0000.csv"
+HYDRO_CSV   = "data/inputs/REprofile/artificial_hydro_China_3400hrs.csv"
 
 OTHERS_SETTING_CSV = "data/inputs/Others/others_setting.csv"
 
@@ -196,6 +198,7 @@ def build_network(year: int) -> pypsa.Network:
     onwind_cf  = read_ts(ONWIND_CSV,  idx, nodes)
     offwind_cf = read_ts(OFFWIND_CSV, idx, nodes)
     solar_cf   = read_ts(SOLAR_CSV,   idx, nodes)
+    hydro_cf  = read_ts(HYDRO_CSV,   idx, nodes)    
 
     edges = pd.read_csv(EDGES_CSV)
     edges["from_node"] = edges["from_node"].map(norm)
@@ -419,6 +422,7 @@ def build_network(year: int) -> pypsa.Network:
         "onwind": onwind_cf,
         "offwind": offwind_cf,
         "solar": solar_cf,
+        "hydro": hydro_cf,
     }.items():
 
         gens = n.generators.index[n.generators.carrier == carrier]
