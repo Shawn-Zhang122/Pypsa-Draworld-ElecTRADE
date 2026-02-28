@@ -23,20 +23,32 @@ YEAR = 2025
 HORIZON_HOURS = 48
 STEP_HOURS = 24
 
-# Get the directory where the script is located, to be cleaned..by Shuwei, FEb.25
-# BASE_DIR = Path(__file__).resolve().parent.parent
+# 1. Dynamically get the root directory of your project
+# Path(__file__) is 'model/rolling_48hours_network.py'
+# .parent is 'model/'
+# .parent.parent is 'Pypsa-Draworld-ElecTRADE/'
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-LOAD_CSV   = "data/inputs/Load/Load_NDRC_BAs_China_Draworld_normalised_2025compiled.csv"
-EDGES_CSV  = "data/inputs/Network/edges_33nodes_500kVplus_updates_Jan2026.csv"
-GEN_CSV    = "data/inputs/Generator/generators_units.csv"
+# 2. Update all paths using the / operator for cross-platform compatibility
+LOAD_CSV   = BASE_DIR / "data/inputs/Load/Load_NDRC_BAs_China_Draworld_normalised_2025compiled.csv"
+EDGES_CSV  = BASE_DIR / "data/inputs/Network/edges_33nodes_500kVplus_updates_Jan2026.csv"
+GEN_CSV    = BASE_DIR / "data/inputs/Generator/generators_units.csv"
 
-ONWIND_CSV  = "data/inputs/REprofile/ninja_wind_29.0000_120.0000.csv"
-# to be updated by Shuwei, Feb.25, 2026, with the latest data from NINJA (2025 compiled)
-OFFWIND_CSV = "data/inputs/REprofile/ninja_wind_29.0000_120.0000.csv"
-SOLAR_CSV   = "data/inputs/REprofile/ninja_pv_29.0000_120.0000.csv"
-HYDRO_CSV   = "data/inputs/REprofile/artificial_hydro_China_3400hrs.csv"
+ONWIND_CSV  = BASE_DIR / "data/inputs/REprofile/ninja_wind_29.0000_120.0000.csv"
+OFFWIND_CSV = BASE_DIR / "data/inputs/REprofile/ninja_wind_29.0000_120.0000.csv"
+SOLAR_CSV   = BASE_DIR / "data/inputs/REprofile/ninja_pv_29.0000_120.0000.csv"
 
-OTHERS_SETTING_CSV = "data/inputs/Others/others_setting.csv"
+# Ensure this matches exactly where you saved the file earlier
+HYDRO_CSV   = BASE_DIR / "data/inputs/REprofile/artificial_hydro_China_3400hrs.csv"
+
+OTHERS_SETTING_CSV = BASE_DIR / "data/inputs/Others/others_setting.csv"
+
+# 3. Add a "Safety Check" print for your cron logs
+for name, path in [("Load", LOAD_CSV), ("Hydro", HYDRO_CSV), ("Gen", GEN_CSV)]:
+    if not path.exists():
+        print(f"WARNING: File not found at: {path}")
+    else:
+        print(f"SUCCESS: {name} path resolved to: {path}")
 
 
 # ============================================================
