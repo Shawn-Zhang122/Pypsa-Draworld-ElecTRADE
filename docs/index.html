@@ -254,36 +254,29 @@ function initMap(avgPrice, data, timestamps) {
                 data: { type: "FeatureCollection", features: processedFeatures } 
             });
 
-            // Find the first symbol/label layer in the demotiles style to use as insertion point.
-            // This lets our layers appear ABOVE the land fill but BELOW the tile's own labels.
-            const firstSymbolLayer = mapInstance.getStyle().layers.find(l => l.type === 'symbol');
-            const insertBefore = firstSymbolLayer ? firstSymbolLayer.id : undefined;
-
-            // --- LAYER 1: Province Fill (subtle highlight) ---
+            // --- LAYER 1: Province Borders (Using High Contrast) ---
             mapInstance.addLayer({
                 id: 'province-fill',
                 type: 'fill',
                 source: 'provinces',
                 paint: {
-                    'fill-color': '#d4e8f7',
-                    'fill-opacity': 0.35
+                    'fill-color': '#ffffff',
+                    'fill-opacity': 0.15
                 }
-            }, insertBefore);
+            });
 
-            // --- LAYER 2: Province Borders (inserted just below tile labels) ---
             mapInstance.addLayer({
-                id: 'province-borders',
-                type: 'line',
-                source: 'provinces',
-                paint: {
-                    'line-color': '#1a1a1a',
-                    'line-opacity': 1,
-                    'line-width': 2
+                'id': 'province-borders',
+                'type': 'line',
+                'source': 'provinces',
+                'paint': {
+                    'line-color': '#333333', // Dark charcoal (High contrast)
+                    'line-opacity': 1,     // Very visible
+                    'line-width': 3        // Thick enough to see clearly
                 }
-            }, insertBefore);
+            });
 
-            // Circles and labels go AFTER insertBefore (on top of everything) ---
-            // --- LAYER 3: Circles ---
+            // --- LAYER 2: Circles ---
             mapInstance.addLayer({
                 id: 'node-circle',
                 type: 'circle',
@@ -299,7 +292,7 @@ function initMap(avgPrice, data, timestamps) {
                 }
             });
 
-            // --- LAYER 4: Labels ---
+            // --- LAYER 3: Labels ---
             mapInstance.addLayer({
                 id: 'node-label',
                 type: 'symbol',
@@ -313,10 +306,10 @@ function initMap(avgPrice, data, timestamps) {
                 paint: { 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
             });
 
-            // Watermark and Interactions (same as before)
+            // Watermark and Interactions
             const credit = document.createElement("div");
             credit.className = "map-credit";
-            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA | Map @ MapLibre`;
+            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA <br>Map @ MapLibre`;
             document.getElementById("priceMap").appendChild(credit);
 
             hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
