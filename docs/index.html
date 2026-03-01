@@ -221,12 +221,12 @@ async function loadApp() {
 function initMap(avgPrice, data, timestamps) {
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
-        style: {
-            version: 8,
-            sources: {},
-            layers: []
-        },
-        //style: "https://demotiles.maplibre.org/style.json",
+        // style: {
+        //     version: 8,
+        //     sources: {},
+        //     layers: []
+        // },
+        style: "https://demotiles.maplibre.org/style.json",
         center: [105, 37],
         zoom: 3.8
     });
