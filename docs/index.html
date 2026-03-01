@@ -367,7 +367,7 @@ function updateBeijingTime() {
         minute: '2-digit' 
     });
 
-    document.getElementById('beijing-clock').innerText = `Beijing Time: ${datePart} (${weekDay}) ${timePart}`;
+    document.getElementById('beijing-clock').innerText = `Current Beijing Time: ${datePart} (${weekDay}) ${timePart}`;
     
     // Update every minute (60,000 milliseconds)
     setTimeout(updateBeijingTime, 60000); 
