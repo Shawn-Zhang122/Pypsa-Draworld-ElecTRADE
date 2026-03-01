@@ -111,7 +111,7 @@
     <div id="error"></div>
 
 <script>
-let mapInstance;
+let mapInstance; 
 let hoverPopup;
 
 /* ---------- Helper: Centroid to fix duplicate circles in MultiPoint ---------- */
@@ -256,6 +256,16 @@ function initMap(avgPrice, data, timestamps) {
 
             // --- LAYER 1: Province Borders (Using High Contrast) ---
             mapInstance.addLayer({
+                id: 'province-fill',
+                type: 'fill',
+                source: 'provinces',
+                paint: {
+                    'fill-color': '#ffffff',
+                    'fill-opacity': 0.15
+                }
+            });
+
+            mapInstance.addLayer({
                 'id': 'province-borders',
                 'type': 'line',
                 'source': 'provinces',
@@ -295,11 +305,6 @@ function initMap(avgPrice, data, timestamps) {
                 },
                 paint: { 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
             });
-
-            // Ensure borders are not hidden by the background style
-            if (mapInstance.getLayer('province-borders')) {
-                mapInstance.moveLayer('province-borders'); 
-            }
 
             // Watermark and Interactions (same as before)
             const credit = document.createElement("div");
