@@ -289,6 +289,20 @@ function initMap(avgPrice, data, timestamps) {
             }
         });
 
+        mapInstance.addLayer({
+            'id': 'province-borders',
+            'type': 'line',
+            'source': 'provinces',
+            'paint': {
+                // Change color to a light grey or white
+                'line-color': '#ffffff', 
+                // Lower this value to make it very faint (0.1 to 0.3 is very light)
+                'line-opacity': 0.25, 
+                // Keep the width thin
+                'line-width': 0.8
+            }
+        });
+
         // ---- Credit watermark ----
         const credit = document.createElement("div");
         credit.className = "map-credit";
@@ -365,7 +379,7 @@ function updateBeijingTime() {
     const p = {};
     parts.forEach(part => p[part.type] = part.value);
     
-    const displayStr = `Current UTC+8 Beijing Time: ${p.hour}:${p.minute}, ${p.month}-${p.day} (${p.weekday}), ${p.year}`;
+    const displayStr = `Current UTC+8 Beijing Time: ${p.hour}:${p.minute}, ${p.year}-${p.month}-${p.day} (${p.weekday})}`;
     document.getElementById('beijing-clock').innerText = displayStr;
 
     const nextHour = new Date();
