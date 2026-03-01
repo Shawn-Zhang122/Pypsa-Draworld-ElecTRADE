@@ -352,14 +352,25 @@ function showProvinceCurve(zone, data, timestamps) {
 /* ---------- REAL-TIME CLOCK ---------- */
 function updateBeijingTime() {
     const now = new Date();
+    
     // Format: 2026-03-01
     const datePart = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+    
     // Format: Sunday
     const weekDay = now.toLocaleDateString('en-GB', { timeZone: 'Asia/Shanghai', weekday: 'long' });
-    // Format: 15:00:05
-    const timePart = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Shanghai', hour12: false });
+    
+    // Format: 15:00 (No seconds)
+    const timePart = now.toLocaleTimeString('en-GB', { 
+        timeZone: 'Asia/Shanghai', 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+
     document.getElementById('beijing-clock').innerText = `Beijing Time: ${datePart} (${weekDay}) ${timePart}`;
-    setTimeout(updateBeijingTime, 1000); // Update every second for a live clock
+    
+    // Update every minute (60,000 milliseconds)
+    setTimeout(updateBeijingTime, 60000); 
 }
 
 // Kickoff
