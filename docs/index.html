@@ -1,125 +1,116 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>Pypsa-China-ElecTRADE-Draworld, 2026 Version</title>
+    <meta charset="UTF-8">
+    <title>Pypsa-China-ElecTRADE-Draworld, 2026 Version</title>
 
-<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet"/>
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 
-<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet"/>
-<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px auto;
+            max-width: 1600px;
+            background-color: #fcfcfc;
+        }
 
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        margin: 20px auto;
-        max-width: 1600px;
-        background-color: #fcfcfc;
-    }
+        h1 { margin-bottom: 5px; font-weight: 600; }
+        .subtitle { margin-bottom: 20px; color: #666; font-size: 14px; }
 
-    h1 {
-        margin-bottom: 5px;
-        font-weight: 600;
-    }
+        /* Status Bar Style */
+        .status-bar {
+            background: #f8f9fa;
+            border-left: 4px solid #2166ac;
+            padding: 12px 20px;
+            margin-bottom: 25px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            border: 1px solid #e9ecef;
+        }
 
-    /* ... existing styles ... */
-    .status-bar {
-        background: #f8f9fa;
-        border-left: 4px solid #2166ac;
-        padding: 12px 20px;
-        margin-bottom: 25px;
-        border-radius: 6px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 14px;
-        border: 1px solid #e9ecef;
-    }
-    .time-chip {
-        font-weight: 700;
-        color: #b2182b;
-        background: #fff;
-        padding: 5px 10px;
-        border-radius: 4px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
+        .time-chip {
+            font-weight: 700;
+            color: #b2182b;
+            background: #fff;
+            padding: 5px 10px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
 
-</style>
+        h2 { margin-top: 40px; color: #333; }
 
-<div class="status-bar">
-    <span>
-        <strong style="color: #2166ac;">System Status:</strong> 
-        Automated 33-node Dispatch | 
-        <span id="data-status" style="color: #666;">Syncing data...</span>
-    </span>
-    <div id="beijing-clock" class="time-chip">Loading Time...</div>
-</div>
+        /* Container Styles */
+        #priceMap, #provinceCurve {
+            height: 650px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            position: relative;
+        }
 
-<style>
+        #socChart {
+            height: 600px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            margin-top: 20px;
+        }
 
-    h2 { margin-top: 40px; color: #333; }
+        #error { color:red; margin-top:10px; font-weight: bold; }
 
-    #priceMap, #provinceCurve {
-        height: 650px;
-        background: white;
-        border-radius: 8px;
-        border: 1px solid #ddd;
-        position: relative;
-    }
-
-    #socChart {
-        height: 600px;
-        background: white;
-        border-radius: 8px;
-        border: 1px solid #ddd;
-        margin-top: 20px;
-    }
-
-    #error {
-        color:red;
-        margin-top:10px;
-        font-weight: bold;
-    }
-
-    .map-credit {
-        position:absolute;
-        bottom:8px;
-        right:10px;
-        font-size:11px;
-        background:rgba(255,255,255,0.85);
-        padding:6px 8px;
-        border-radius:6px;
-        line-height:1.4;
-        box-shadow:0 0 4px rgba(0,0,0,0.15);
-    }
-</style>
-
+        .map-credit {
+            position:absolute;
+            bottom:8px;
+            right:10px;
+            font-size:11px;
+            background:rgba(255,255,255,0.85);
+            padding:6px 8px;
+            border-radius:6px;
+            line-height:1.4;
+            box-shadow:0 0 4px rgba(0,0,0,0.15);
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
 </head>
 <body>
 
-<h1>China ElecTRADE — Daily Results (t+1) </h1>
-<div class="subtitle">
-Rolling 48h dispatch | 33-node zonal pricing | Automated publication
-</div>
-
-<div style="display:flex; gap:30px;">
-    <div style="flex:1;">
-        <h2>Province-Node Price Dynamics (24h Avg)</h2>
-        <div id="priceMap"></div>
+    <div class="status-bar">
+        <span>
+            <strong style="color: #2166ac;">System Status:</strong> 
+            Automated 33-node Dispatch | 
+            <span id="data-status" style="color: #666;">Syncing data...</span>
+        </span>
+        <div id="beijing-clock" class="time-chip">Loading Time...</div>
     </div>
-    <div style="flex:1;">
-        <h2 id="curveTitle">Price Profile, Day-ahead</h2>
-        <div id="provinceCurve"></div>
+
+    <h1>China ElecTRADE — Daily Results (t+1) </h1>
+    <div class="subtitle">
+        Rolling 48h dispatch | 33-node zonal pricing | Automated publication
     </div>
-</div>
 
-<h2> Storage Status of Charge (SOC) by Tomorrow </h2>
-<div id="socChart"></div>
+    <div style="display:flex; gap:30px;">
+        <div style="flex:1;">
+            <h2>Province-Node Price Dynamics (24h Avg)</h2>
+            <div id="priceMap"></div>
+        </div>
+        <div style="flex:1;">
+            <h2 id="curveTitle">Price Profile, Day-ahead</h2>
+            <div id="provinceCurve"></div>
+        </div>
+    </div>
 
-<div id="error"></div>
+    <h2> Storage Status of Charge (SOC) by Tomorrow </h2>
+    <div id="socChart"></div>
+
+    <div id="error"></div>
 
 <script>
-
 let mapInstance;
 let hoverPopup;
 
@@ -154,6 +145,7 @@ async function loadCSV(url) {
     if (!res.ok) throw new Error("File not found: " + url);
     const text = await res.text();
     const rows = text.trim().split("\n");
+    // Handle UTF-8 BOM
     const headers = rows[0].replace(/^\uFEFF/, "").split(",");
     
     return rows.slice(1).map(row => {
@@ -166,24 +158,22 @@ async function loadCSV(url) {
     });
 }
 
-/* ---------- MAIN APP ---------- */
+/* ---------- MAIN APP LOGIC ---------- */
 async function loadApp() {
     try {
-        // 1. Fetch the index.json (path is relative to the docs/ folder)
+        // Fetch Index
         const config = await fetch("out/index.json").then(r => r.json());
 
-        // 2. Update Status Bar with publication metadata
+        // Update Metadata in Status Bar
         if (config.last_update && config.delivery_date) {
             const statusEl = document.getElementById('data-status');
             statusEl.innerHTML = `Latest Results: <b style="color:#b2182b;">${config.delivery_date}</b> ` +
                                  `<span style="font-size:12px; color:#888;">(Cleared at: ${config.last_update})</span>`;
         }
 
-        // 3. Process Price Data
+        // Process Price Files
         const priceFiles = config.price_files.slice().sort((a, b) => b.localeCompare(a));
         const latestPriceFile = priceFiles[0];
-        
-        // Path is out/prices/... since index.html is in docs/
         const priceData = await loadCSV("out/prices/" + latestPriceFile);
 
         const columns = Object.keys(priceData[0]);
@@ -195,17 +185,17 @@ async function loadApp() {
 
         const timestamps = priceData.map(d => d.snapshot);
 
-        // 4. Calculate Zonal Average Prices for Map Visualization
+        // Calculate Averages for Map
         let avgPrice = {};
         provinces.forEach(zone => {
             const vals = priceData.map(d => Number(d[zone])).filter(v => !isNaN(v));
             avgPrice[zone] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
         });
 
-        // 5. Initialize Map and default curves
+        // Initialize Map
         initMap(avgPrice, priceData, timestamps);
 
-        // 6. Handle Storage State of Charge (SOC) Visualization
+        // Handle Storage SOC
         const socData = await loadCSV("out/" + config.soc_file);
         Plotly.newPlot("socChart", [{
             x: socData.map(d => d.name),
@@ -214,18 +204,15 @@ async function loadApp() {
             marker: { color: '#2166ac' }
         }], {
             title: `Storage SOC State (${latestPriceFile.replace('.csv','')})`,
-            xaxis: { 
-                title: "Storage Unit", 
-                tickfont: { size: 10 } 
-            },
+            xaxis: { title: "Storage Unit", tickfont: { size: 10 } },
             yaxis: { title: "Energy (MWh)" },
-            margin: { b: 150, t: 50 } // Extra bottom margin for rotated labels
+            margin: { b: 150, t: 50 }
         });
 
     } catch (err) {
         const errorEl = document.getElementById("error");
         if (errorEl) errorEl.innerText = "Application Error: " + err.message;
-        console.error("Load Error:", err);
+        console.error(err);
     }
 }
 
@@ -235,29 +222,43 @@ function initMap(avgPrice, data, timestamps) {
         container: 'priceMap',
         style: "https://demotiles.maplibre.org/style.json",
         center: [105, 37],
-        zoom: 3.5
+        zoom: 3.8
     });
 
     mapInstance.on('load', async () => {
         const rawGeo = await fetch("geo/china_33nodes.geojson").then(r => r.json());
 
+        // Source 1: Original Polygons for the Light Borders
+        mapInstance.addSource('provinces', { type: 'geojson', data: rawGeo });
+
+        // Source 2: Processed Points for Circles
         const processedFeatures = rawGeo.features.map(f => {
             const geoName = f.properties.name.trim();
             const price = avgPrice[geoName] || 0;
             return {
                 type: "Feature",
                 properties: { ...f.properties, price: isFinite(price) ? price : 0 },
-                geometry: {
-                    type: "Point",
-                    coordinates: getCentroid(f)
-                }
+                geometry: { type: "Point", coordinates: getCentroid(f) }
             };
-        }); // Close map function properly
+        });
+        mapInstance.addSource('nodes', { 
+            type: 'geojson', 
+            data: { type: "FeatureCollection", features: processedFeatures } 
+        });
 
-        const geo = { type: "FeatureCollection", features: processedFeatures };
+        // Layer 1: Subtle Province Borders (The specific fix you requested)
+        mapInstance.addLayer({
+            'id': 'province-borders',
+            'type': 'line',
+            'source': 'provinces',
+            'paint': {
+                'line-color': '#cccccc',
+                'line-opacity': 0.35,
+                'line-width': 0.7
+            }
+        });
 
-        mapInstance.addSource('nodes', { type: 'geojson', data: geo });
-
+        // Layer 2: Circles (Color by Price)
         mapInstance.addLayer({
             id: 'node-circle',
             type: 'circle',
@@ -273,6 +274,7 @@ function initMap(avgPrice, data, timestamps) {
             }
         });
 
+        // Layer 3: Labels
         mapInstance.addLayer({
             id: 'node-label',
             type: 'symbol',
@@ -283,43 +285,23 @@ function initMap(avgPrice, data, timestamps) {
                 'text-offset': [0, 2],
                 'text-anchor': 'top'
             },
-            paint: {
-                'text-halo-color': '#fff',
-                'text-halo-width': 1.5
-            }
+            paint: { 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
         });
 
-        mapInstance.addLayer({
-            'id': 'province-borders',
-            'type': 'line',
-            'source': 'provinces',
-            'paint': {
-                // Change color to a light grey or white
-                'line-color': '#ffffff', 
-                // Lower this value to make it very faint (0.1 to 0.3 is very light)
-                'line-opacity': 0.25, 
-                // Keep the width thin
-                'line-width': 0.8
-            }
-        });
-
-        // ---- Credit watermark ----
+        // Add Watermark
         const credit = document.createElement("div");
         credit.className = "map-credit";
-        credit.innerHTML = `
-            ElecTRADE @ Draworld, Beijing<br>
-            Optimization @ PyPSA <br>
-            Map-Engine @ MapLibre
-        `;
+        credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA | Map @ MapLibre`;
         document.getElementById("priceMap").appendChild(credit);
 
+        // Interaction Logic
         hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
 
         mapInstance.on('mousemove', 'node-circle', e => {
             const p = e.features[0].properties;
             mapInstance.getCanvas().style.cursor = 'pointer';
             hoverPopup.setLngLat(e.lngLat)
-                .setHTML(`<b>${p.name}</b><br>24h Avg: ${p.price.toFixed(0)} RMB/MWh`)
+                .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(0)} RMB/MWh`)
                 .addTo(mapInstance);
         });
 
@@ -332,12 +314,9 @@ function initMap(avgPrice, data, timestamps) {
             showProvinceCurve(e.features[0].properties.name, data, timestamps);
         });
 
-        // --- FIXED DEFAULT LOGIC ---
-        if (geo.features.length > 0) {
-            // Find Guangdong or fallback to first node
-            const defaultNode = geo.features.find(f => f.properties.name === "Guangdong") || geo.features[0];
-            showProvinceCurve(defaultNode.properties.name, data, timestamps);
-        }
+        // Default: Show Guangdong Curve
+        const guangdongNode = processedFeatures.find(f => f.properties.name === "Guangdong") || processedFeatures[0];
+        showProvinceCurve(guangdongNode.properties.name, data, timestamps);
     });
 }
 
@@ -359,41 +338,26 @@ function showProvinceCurve(zone, data, timestamps) {
     document.getElementById("curveTitle").innerText = "Hourly Price — " + zone;
 }
 
-/* ---------- HOURLY BEIJING CLOCK ---------- */
+/* ---------- REAL-TIME CLOCK ---------- */
 function updateBeijingTime() {
-    const now = new Date();
-    
-    const options = {
-        timeZone: 'Asia/Shanghai',
-        hour: '2-digit',
-        hour12: false,
-        minute: '2-digit',
-        month: '2-digit',
-        day: '2-digit',
+    const options = { 
+        timeZone: 'Asia/Shanghai', 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        month: '2-digit', 
+        day: '2-digit', 
+        year: 'numeric', 
         weekday: 'long',
-        year: 'numeric'
+        hour12: false 
     };
-
-    const formatter = new Intl.DateTimeFormat('en-GB', options);
-    const parts = formatter.formatToParts(now);
-    const p = {};
-    parts.forEach(part => p[part.type] = part.value);
-    
-    const displayStr = `Current UTC+8 Beijing Time: ${p.hour}:${p.minute}, ${p.year}-${p.month}-${p.day} (${p.weekday})}`;
-    document.getElementById('beijing-clock').innerText = displayStr;
-
-    const nextHour = new Date();
-    nextHour.setHours(now.getHours() + 1, 0, 0, 0);
-    const msUntilNextHour = nextHour - now;
-
-    setTimeout(updateBeijingTime, msUntilNextHour);
+    const now = new Intl.DateTimeFormat('en-GB', options).format(new Date());
+    document.getElementById('beijing-clock').innerText = `Beijing Time: ${now}`;
+    setTimeout(updateBeijingTime, 60000);
 }
 
-// Initial call to start the clock
+// Kickoff
 updateBeijingTime();
-
 loadApp();
-
 </script>
 
 </body>
