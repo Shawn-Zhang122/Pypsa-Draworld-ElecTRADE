@@ -220,26 +220,12 @@ async function loadApp() {
 function initMap(avgPrice, data, timestamps) {
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
-        style: {
-            version: 8,
-            glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-            sources: {
-                'carto-bg': {
-                    type: 'raster',
-                    tiles: ['https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png'],
-                    tileSize: 256,
-                    attribution: '© OpenStreetMap contributors © CARTO'
-                }
-            },
-            layers: [
-                {
-                    id: 'background',
-                    type: 'raster',
-                    source: 'carto-bg',
-                    paint: { 'raster-opacity': 1 }
-                }
-            ]
-        },
+        // style: {
+        //     version: 8,
+        //     sources: {},
+        //     layers: []
+        // },
+        style: "https://demotiles.maplibre.org/style.json",
         center: [105, 37],
         zoom: 3.8
     });
@@ -269,6 +255,16 @@ function initMap(avgPrice, data, timestamps) {
             });
 
             // --- LAYER 1: Province Borders (Using High Contrast) ---
+            mapInstance.addLayer({
+                id: 'province-fill',
+                type: 'fill',
+                source: 'provinces',
+                paint: {
+                    'fill-color': '#ffffff',
+                    'fill-opacity': 0.15
+                }
+            });
+
             mapInstance.addLayer({
                 'id': 'province-borders',
                 'type': 'line',
@@ -310,15 +306,10 @@ function initMap(avgPrice, data, timestamps) {
                 paint: { 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
             });
 
-            // Ensure borders are not hidden by the background style
-            if (mapInstance.getLayer('province-borders')) {
-                mapInstance.moveLayer('province-borders'); 
-            }
-
-            // Watermark and Interactions (same as before)
+            // Watermark and Interactions
             const credit = document.createElement("div");
             credit.className = "map-credit";
-            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA | Map @ MapLibre`;
+            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA <br>Map @ MapLibre`;
             document.getElementById("priceMap").appendChild(credit);
 
             hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
