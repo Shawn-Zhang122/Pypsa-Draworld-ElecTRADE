@@ -306,10 +306,10 @@ function initMap(avgPrice, data, timestamps) {
                 paint: { 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
             });
 
-            // Watermark and Interactions (same as before)
+            // Watermark and Interactions
             const credit = document.createElement("div");
             credit.className = "map-credit";
-            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA | Map @ MapLibre`;
+            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA <br>Map @ MapLibre`;
             document.getElementById("priceMap").appendChild(credit);
 
             hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
