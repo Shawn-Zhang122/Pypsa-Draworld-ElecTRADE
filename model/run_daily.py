@@ -167,32 +167,38 @@ print("Saved updated SOC state.")
 # Update index.json
 # ============================================================
 
+# Get current execution time in Beijing
+update_time_str = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+
 index_path = "docs/out/index.json"
 
+# Load existing index
 if os.path.exists(index_path):
     with open(index_path, "r") as f:
         index = json.load(f)
 else:
     index = {"price_files": [], "soc_file": "last_soc.csv"}
 
+# Record current result filename
 filename = f"{date_str}.csv"
-
 if filename not in index["price_files"]:
     index["price_files"].append(filename)
 
-index["price_files"] = sorted(index["price_files"], reverse=True)
-index["soc_file"] = "last_soc.csv"
+# Inject metadata for the frontend
+index["last_update"] = update_time_str
+index["delivery_date"] = real_delivery_day.strftime("%Y-%m-%d")
 
+index["price_files"] = sorted(index["price_files"], reverse=True)
+
+# Save the updated index.json
 with open(index_path, "w") as f:
     json.dump(index, f, indent=2)
 
-print("Updated index.json")
-print("Daily rolling simulation completed.")
+print(f"Index updated: {update_time_str} for delivery: {index['delivery_date']}")
 
 # ============================================================
 # Export Full PyPSA Network (.nc)
 # ============================================================
-
 # Use REAL publication date for naming
 date_str = real_delivery_day.strftime("%Y-%m-%d")
 

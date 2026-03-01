@@ -48,10 +48,11 @@
 
 <div class="status-bar">
     <span>
-        <span style="color:#666;">Data Status:</span> 
-        <strong style="color:green;">● Live</strong> | 33-Node Zonal Dispatch
+        <strong style="color: #2166ac;">System Status:</strong> 
+        Automated 33-node Dispatch | 
+        <span id="data-status" style="color: #666;">Syncing data...</span>
     </span>
-    <div id="beijing-clock" class="time-chip">Loading Beijing Time...</div>
+    <div id="beijing-clock" class="time-chip">Loading Time...</div>
 </div>
 
 <style>
@@ -168,11 +169,21 @@ async function loadCSV(url) {
 /* ---------- MAIN APP ---------- */
 async function loadApp() {
     try {
+        // 1. Fetch the index.json (path is relative to the docs/ folder)
         const config = await fetch("out/index.json").then(r => r.json());
 
+        // 2. Update Status Bar with publication metadata
+        if (config.last_update && config.delivery_date) {
+            const statusEl = document.getElementById('data-status');
+            statusEl.innerHTML = `Latest Results: <b style="color:#b2182b;">${config.delivery_date}</b> ` +
+                                 `<span style="font-size:12px; color:#888;">(Cleared at: ${config.last_update})</span>`;
+        }
+
+        // 3. Process Price Data
         const priceFiles = config.price_files.slice().sort((a, b) => b.localeCompare(a));
         const latestPriceFile = priceFiles[0];
-
+        
+        // Path is out/prices/... since index.html is in docs/
         const priceData = await loadCSV("out/prices/" + latestPriceFile);
 
         const columns = Object.keys(priceData[0]);
@@ -184,14 +195,17 @@ async function loadApp() {
 
         const timestamps = priceData.map(d => d.snapshot);
 
+        // 4. Calculate Zonal Average Prices for Map Visualization
         let avgPrice = {};
         provinces.forEach(zone => {
             const vals = priceData.map(d => Number(d[zone])).filter(v => !isNaN(v));
             avgPrice[zone] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
         });
 
+        // 5. Initialize Map and default curves
         initMap(avgPrice, priceData, timestamps);
 
+        // 6. Handle Storage State of Charge (SOC) Visualization
         const socData = await loadCSV("out/" + config.soc_file);
         Plotly.newPlot("socChart", [{
             x: socData.map(d => d.name),
@@ -199,14 +213,19 @@ async function loadApp() {
             type: "bar",
             marker: { color: '#2166ac' }
         }], {
-            title: `Pump-Hydro and Battery Storage SOC (${latestPriceFile.replace('.csv','')})`,
-            xaxis: { title: "Storage Unit" },
-            yaxis: { title: "Energy (MWh)" }
+            title: `Storage SOC State (${latestPriceFile.replace('.csv','')})`,
+            xaxis: { 
+                title: "Storage Unit", 
+                tickfont: { size: 10 } 
+            },
+            yaxis: { title: "Energy (MWh)" },
+            margin: { b: 150, t: 50 } // Extra bottom margin for rotated labels
         });
 
     } catch (err) {
-        document.getElementById("error").innerText = "Error: " + err.message;
-        console.error(err);
+        const errorEl = document.getElementById("error");
+        if (errorEl) errorEl.innerText = "Application Error: " + err.message;
+        console.error("Load Error:", err);
     }
 }
 
