@@ -13,7 +13,6 @@ For a given bus and time window, it:
    - a CSV with hourly setter labels
    - a scatter plot of price colored by setter
 
-Key correction vs your draft
 ----------------------------
 For a Link with bus0 -> bus1 and efficiency eta, and decision variable p0:
 
@@ -24,8 +23,6 @@ Interior KKT (reduced cost = 0) gives:
 
     marginal_cost - LMP_bus0 + eta * LMP_bus1 = 0
 =>  LMP_bus1 = (LMP_bus0 - marginal_cost) / eta
-
-Your draft used: LMP_bus1 = eta * LMP_bus0 + marginal_cost  (wrong sign / scaling)
 
 Notes / limitations
 -------------------

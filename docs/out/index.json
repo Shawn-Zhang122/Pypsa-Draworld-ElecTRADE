@@ -15,6 +15,9 @@
     "2025-01-01.csv"
   ],
   "soc_file": "last_soc.csv",
-  "last_update": "2026-03-02 17:48:25",
-  "delivery_date": "2026-03-03"
+  "last_update": "2026-03-02 19:57:37",
+  "delivery_date": "2026-03-03",
+  "merit_files": [
+    "2026-03-03.csv"
+  ]
 }
