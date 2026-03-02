@@ -249,7 +249,7 @@ function drawMerit(province, hour) {
     const netDemand = filtered[0].net_demand;
     const demandTrace = {
         x: [netDemand, netDemand], y: [0, Math.max(...filtered.map(d=>d.cost)) * 1.2],
-        mode: 'lines', name: 'Net Demand', line: { color: 'black', width: 3, dash: 'dash' }
+        mode: 'lines', name: 'Total Demand', line: { color: 'black', width: 3, dash: 'dash' }
     };
 
     // Add invisible Legend helper traces
@@ -268,37 +268,132 @@ function drawMerit(province, hour) {
 /* ---------- MAP & PRICE CURVE ---------- */
 function initMap(avgPrice, data, timestamps) {
     mapInstance = new maplibregl.Map({
-        container: 'priceMap', center: [105, 37], zoom: 3.8,
+        container: 'priceMap', 
+        center: [105, 37], 
+        zoom: 3.8,
         style: "https://demotiles.maplibre.org/style.json"
     });
 
     mapInstance.on('load', async () => {
-        const rawGeo = await fetch("geo/china_33nodes.geojson").then(r => r.json());
-        const processed = rawGeo.features.map(f => ({
-            type: "Feature", properties: { ...f.properties, price: avgPrice[f.properties.name] || 0 },
-            geometry: { type: "Point", coordinates: getCentroid(f) }
-        }));
+        try {
+            const res = await fetch("geo/china_33nodes.geojson");
+            const rawGeo = await res.json();
 
-        mapInstance.addSource('provinces', { type: 'geojson', data: rawGeo });
-        mapInstance.addSource('nodes', { type: 'geojson', data: { type: "FeatureCollection", features: processed } });
+            // Prepare data with prices mapped to centroids
+            const processed = rawGeo.features.map(f => {
+                const name = f.properties.name ? f.properties.name.trim() : "Unknown";
+                const price = avgPrice[name] || 0;
+                return {
+                    type: "Feature",
+                    properties: { ...f.properties, price: isFinite(price) ? price : 0 },
+                    geometry: { type: "Point", coordinates: getCentroid(f) }
+                };
+            });
 
-        mapInstance.addLayer({ id: 'province-fill', type: 'fill', source: 'provinces', paint: { 'fill-color': '#fff', 'fill-opacity': 0.1 }});
-        mapInstance.addLayer({ id: 'province-borders', type: 'line', source: 'provinces', paint: { 'line-color': '#333', 'line-width': 2 }});
-        mapInstance.addLayer({
-            id: 'node-circle', type: 'circle', source: 'nodes',
-            paint: { 'circle-radius': 14, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff',
-                'circle-color': ['interpolate', ['linear'], ['get', 'price'], 0, '#2166ac', 150, '#f7f7f7', 300, '#b2182b']
-            }
-        });
+            // Sources
+            mapInstance.addSource('provinces', { type: 'geojson', data: rawGeo });
+            mapInstance.addSource('nodes', { 
+                type: 'geojson', 
+                data: { type: "FeatureCollection", features: processed } 
+            });
 
-        mapInstance.on('click', 'node-circle', e => {
-            const name = e.features[0].properties.name;
-            showProvinceCurve(name, data, timestamps);
-            document.getElementById('merit-province-select').value = name;
-            drawMerit(name, document.getElementById('merit-hour-select').value);
-        });
+            // 1. Fill Layer (Subtle background)
+            mapInstance.addLayer({ 
+                id: 'province-fill', 
+                type: 'fill', 
+                source: 'provinces', 
+                paint: { 'fill-color': '#fff', 'fill-opacity': 0.1 }
+            });
 
-        showProvinceCurve("Guangdong", data, timestamps);
+            // 2. Border Layer (High Contrast)
+            mapInstance.addLayer({ 
+                id: 'province-borders', 
+                type: 'line', 
+                source: 'provinces', 
+                paint: { 'line-color': '#333', 'line-width': 2 }
+            });
+
+            // 3. Price Circles
+            mapInstance.addLayer({
+                id: 'node-circle', 
+                type: 'circle', 
+                source: 'nodes',
+                paint: { 
+                    'circle-radius': 14, 
+                    'circle-stroke-width': 2, 
+                    'circle-stroke-color': '#fff',
+                    'circle-color': [
+                        'interpolate', ['linear'], ['get', 'price'], 
+                        0, '#2166ac', 150, '#f7f7f7', 300, '#b2182b'
+                    ]
+                }
+            });
+
+            // 4. Province Name Labels (The missing names!)
+            mapInstance.addLayer({
+                id: 'node-label',
+                type: 'symbol',
+                source: 'nodes',
+                layout: {
+                    'text-field': ['get', 'name'],
+                    'text-size': 11,
+                    'text-offset': [0, 2],
+                    'text-anchor': 'top',
+                    'text-font': ['Open Sans Regular']
+                },
+                paint: { 
+                    'text-halo-color': '#fff', 
+                    'text-halo-width': 1.5,
+                    'text-color': '#333'
+                }
+            });
+
+            // 5. Watermark/Credit
+            const credit = document.createElement("div");
+            credit.className = "map-credit";
+            credit.innerHTML = `<strong>ElecTRADE @ Draworld, Beijing</strong><br>Optimization @ PyPSA<br>Map @ MapLibre`;
+            document.getElementById("priceMap").appendChild(credit);
+
+            // 6. Hover Interactions
+            hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
+
+            mapInstance.on('mousemove', 'node-circle', e => {
+                const p = e.features[0].properties;
+                mapInstance.getCanvas().style.cursor = 'pointer';
+                hoverPopup.setLngLat(e.lngLat)
+                    .setHTML(`<b>${p.name}</b><br>Avg Price: ${p.price.toFixed(1)} RMB/MWh`)
+                    .addTo(mapInstance);
+            });
+
+            mapInstance.on('mouseleave', 'node-circle', () => {
+                mapInstance.getCanvas().style.cursor = '';
+                hoverPopup.remove();
+            });
+
+            // 7. Click Interaction (Sync Map -> Curve -> Merit)
+            mapInstance.on('click', 'node-circle', e => {
+                const provinceName = e.features[0].properties.name;
+                
+                // Update Price Curve
+                showProvinceCurve(provinceName, data, timestamps);
+                
+                // Update Merit Order Select & Chart
+                const pSelect = document.getElementById('merit-province-select');
+                if (pSelect) {
+                    pSelect.value = provinceName;
+                    // Trigger the change manually if you have an onchange listener
+                    pSelect.dispatchEvent(new Event('change'));
+                }
+            });
+
+            // Initial trigger for Guangdong or first node
+            const defaultNode = processed.find(f => f.properties.name === "Guangdong") || processed[0];
+            showProvinceCurve(defaultNode.properties.name, data, timestamps);
+
+        } catch (err) {
+            console.error("Map Initialization Error:", err);
+            document.getElementById("error").innerText = "Map Error: " + err.message;
+        }
     });
 }
 
