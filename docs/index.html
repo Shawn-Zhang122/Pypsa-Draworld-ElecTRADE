@@ -80,7 +80,7 @@
         <span>
             <strong style="color: #2166ac;">System Status:</strong> 
             Automated 33-node Dispatch | 
-            <span id="data-status">Syncing data...</span>
+            <span id="data-status" style="color: #666;">Syncing data...</span>
         </span>
         <div id="beijing-clock" class="time-chip">Loading Time...</div>
     </div>
@@ -155,11 +155,16 @@ async function loadCSV(url) {
 /* ---------- MAIN APP LOGIC ---------- */
 async function loadApp() {
     try {
+
+     // Fetch Index
         const config = await fetch("out/index.json").then(r => r.json());
-        
-        // Update Status
-        document.getElementById('data-status').innerHTML = 
-            `Latest Results: <b style="color:#b2182b;">${config.delivery_date}</b>`;
+
+        // Update Metadata in Status Bar
+        if (config.last_update && config.delivery_date) {
+            const statusEl = document.getElementById('data-status');
+            statusEl.innerHTML = `Latest Results: <b style="color:#b2182b;">${config.delivery_date}</b> ` +
+                                 `<span style="font-size:12px; color:#888;">(Cleared at: ${config.last_update})</span>`;
+        }
 
         // Load Price Data
         const latestPriceFile = config.price_files[0];
@@ -255,7 +260,7 @@ function drawMerit(province, hour) {
     Plotly.newPlot('meritChart', [...blockTraces, demandTrace, ...legendTraces], {
         title: `Merit Order: ${province} (${hour})`,
         xaxis: { title: "Cumulative Supply (MW)" },
-        yaxis: { title: "Day-aheadPrice (RMB/MWh)" },
+        yaxis: { title: "Day-ahead Price (RMB/MWh)" },
         hovermode: 'closest'
     });
 }
@@ -305,11 +310,28 @@ function showProvinceCurve(zone, data, timestamps) {
     document.getElementById("curveTitle").innerText = "Price Profile — " + zone;
 }
 
+/* ---------- REAL-TIME CLOCK ---------- */
 function updateBeijingTime() {
     const now = new Date();
-    const timePart = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit' });
-    document.getElementById('beijing-clock').innerText = `Beijing Time: ${timePart}`;
-    setTimeout(updateBeijingTime, 60000);
+    
+    // Format: 2026-03-01
+    const datePart = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+    
+    // Format: Sunday
+    const weekDay = now.toLocaleDateString('en-GB', { timeZone: 'Asia/Shanghai', weekday: 'long' });
+    
+    // Format: 15:00 (No seconds)
+    const timePart = now.toLocaleTimeString('en-GB', { 
+        timeZone: 'Asia/Shanghai', 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+
+    document.getElementById('beijing-clock').innerText = `Current Beijing Time: ${datePart} (${weekDay}) ${timePart}`;
+    
+    // Update every minute (60,000 milliseconds)
+    setTimeout(updateBeijingTime, 60000); 
 }
 
 updateBeijingTime();

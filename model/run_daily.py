@@ -176,7 +176,7 @@ for i, t in enumerate(n.snapshots[:PUBLISH_HOURS]):
                     merit_data.append({
                         "bus": bus, "snapshot": ts_str, "type": "Congestion",
                         "label": f"Rent_{link_name}",
-                        "capacity": delivered_cap, "cost": dest_price,
+                        "capacity": 0, "cost": dest_price,
                         "net_demand": net_demand
                     })
 
