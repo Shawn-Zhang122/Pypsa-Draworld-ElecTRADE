@@ -265,13 +265,18 @@ function drawMerit(province, hour) {
     });
 }
 
-/* ---------- MAP & PRICE CURVE ---------- */
+/* ---------- MAP COMPONENT ---------- */
 function initMap(avgPrice, data, timestamps) {
     mapInstance = new maplibregl.Map({
-        container: 'priceMap', 
-        center: [105, 37], 
-        zoom: 3.8,
-        style: "https://demotiles.maplibre.org/style.json"
+        container: 'priceMap',
+        // style: {
+        //     version: 8,
+        //     sources: {},
+        //     layers: []
+        // },
+        style: "https://demotiles.maplibre.org/style.json",
+        center: [105, 37],
+        zoom: 3.8
     });
 
     mapInstance.on('load', async () => {
@@ -279,10 +284,13 @@ function initMap(avgPrice, data, timestamps) {
             const res = await fetch("geo/china_33nodes.geojson");
             const rawGeo = await res.json();
 
-            // Prepare data with prices mapped to centroids
-            const processed = rawGeo.features.map(f => {
-                const name = f.properties.name ? f.properties.name.trim() : "Unknown";
-                const price = avgPrice[name] || 0;
+            // Source for Polygons
+            mapInstance.addSource('provinces', { type: 'geojson', data: rawGeo });
+
+            // Processed Points for Circles
+            const processedFeatures = rawGeo.features.map(f => {
+                const geoName = f.properties.name ? f.properties.name.trim() : "Unknown";
+                const price = avgPrice[geoName] || 0;
                 return {
                     type: "Feature",
                     properties: { ...f.properties, price: isFinite(price) ? price : 0 },
@@ -290,46 +298,50 @@ function initMap(avgPrice, data, timestamps) {
                 };
             });
 
-            // Sources
-            mapInstance.addSource('provinces', { type: 'geojson', data: rawGeo });
             mapInstance.addSource('nodes', { 
                 type: 'geojson', 
-                data: { type: "FeatureCollection", features: processed } 
+                data: { type: "FeatureCollection", features: processedFeatures } 
             });
 
-            // 1. Fill Layer (Subtle background)
-            mapInstance.addLayer({ 
-                id: 'province-fill', 
-                type: 'fill', 
-                source: 'provinces', 
-                paint: { 'fill-color': '#fff', 'fill-opacity': 0.1 }
-            });
-
-            // 2. Border Layer (High Contrast)
-            mapInstance.addLayer({ 
-                id: 'province-borders', 
-                type: 'line', 
-                source: 'provinces', 
-                paint: { 'line-color': '#333', 'line-width': 2 }
-            });
-
-            // 3. Price Circles
+            // --- LAYER 1: Province Borders (Using High Contrast) ---
             mapInstance.addLayer({
-                id: 'node-circle', 
-                type: 'circle', 
-                source: 'nodes',
-                paint: { 
-                    'circle-radius': 14, 
-                    'circle-stroke-width': 2, 
-                    'circle-stroke-color': '#fff',
-                    'circle-color': [
-                        'interpolate', ['linear'], ['get', 'price'], 
-                        0, '#2166ac', 150, '#f7f7f7', 300, '#b2182b'
-                    ]
+                id: 'province-fill',
+                type: 'fill',
+                source: 'provinces',
+                paint: {
+                    'fill-color': '#ffffff',
+                    'fill-opacity': 0.15
                 }
             });
 
-            // 4. Province Name Labels (The missing names!)
+            mapInstance.addLayer({
+                'id': 'province-borders',
+                'type': 'line',
+                'source': 'provinces',
+                'paint': {
+                    'line-color': '#333333', // Dark charcoal (High contrast)
+                    'line-opacity': 1,     // Very visible
+                    'line-width': 3        // Thick enough to see clearly
+                }
+            });
+
+            // --- LAYER 2: Circles ---
+            mapInstance.addLayer({
+                id: 'node-circle',
+                type: 'circle',
+                source: 'nodes',
+                paint: {
+                    'circle-radius': 15,
+                    'circle-color': [
+                        'interpolate', ['linear'], ['get', 'price'],
+                        0, '#2166ac', 150, '#f7f7f7', 300, '#b2182b'
+                    ],
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#fff'
+                }
+            });
+
+            // --- LAYER 3: Labels ---
             mapInstance.addLayer({
                 id: 'node-label',
                 type: 'symbol',
@@ -338,20 +350,15 @@ function initMap(avgPrice, data, timestamps) {
                     'text-field': ['get', 'name'],
                     'text-size': 11,
                     'text-offset': [0, 2],
-                    'text-anchor': 'top',
-                    'text-font': ['Open Sans Regular']
+                    'text-anchor': 'top'
                 },
-                paint: { 
-                    'text-halo-color': '#fff', 
-                    'text-halo-width': 1.5,
-                    'text-color': '#333'
-                }
+                paint: { 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
             });
 
             // Watermark and Interactions
             const credit = document.createElement("div");
             credit.className = "map-credit";
-            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA | Map @ MapLibre`;
+            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA <br>Map @ MapLibre`;
             document.getElementById("priceMap").appendChild(credit);
 
             hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
