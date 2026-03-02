@@ -348,20 +348,19 @@ function initMap(avgPrice, data, timestamps) {
                 }
             });
 
-            // 5. Watermark/Credit
+            // Watermark and Interactions
             const credit = document.createElement("div");
             credit.className = "map-credit";
-            credit.innerHTML = `<strong>ElecTRADE @ Draworld, Beijing</strong><br>Optimization @ PyPSA<br>Map @ MapLibre`;
+            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA | Map @ MapLibre`;
             document.getElementById("priceMap").appendChild(credit);
 
-            // 6. Hover Interactions
             hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
 
             mapInstance.on('mousemove', 'node-circle', e => {
                 const p = e.features[0].properties;
                 mapInstance.getCanvas().style.cursor = 'pointer';
                 hoverPopup.setLngLat(e.lngLat)
-                    .setHTML(`<b>${p.name}</b><br>Avg Price: ${p.price.toFixed(1)} RMB/MWh`)
+                    .setHTML(`<b>${p.name}</b><br>Avg: ${p.price.toFixed(0)} RMB/MWh`)
                     .addTo(mapInstance);
             });
 
@@ -370,29 +369,15 @@ function initMap(avgPrice, data, timestamps) {
                 hoverPopup.remove();
             });
 
-            // 7. Click Interaction (Sync Map -> Curve -> Merit)
             mapInstance.on('click', 'node-circle', e => {
-                const provinceName = e.features[0].properties.name;
-                
-                // Update Price Curve
-                showProvinceCurve(provinceName, data, timestamps);
-                
-                // Update Merit Order Select & Chart
-                const pSelect = document.getElementById('merit-province-select');
-                if (pSelect) {
-                    pSelect.value = provinceName;
-                    // Trigger the change manually if you have an onchange listener
-                    pSelect.dispatchEvent(new Event('change'));
-                }
+                showProvinceCurve(e.features[0].properties.name, data, timestamps);
             });
 
-            // Initial trigger for Guangdong or first node
-            const defaultNode = processed.find(f => f.properties.name === "Guangdong") || processed[0];
-            showProvinceCurve(defaultNode.properties.name, data, timestamps);
+            const guangdongNode = processedFeatures.find(f => f.properties.name === "Guangdong") || processedFeatures[0];
+            showProvinceCurve(guangdongNode.properties.name, data, timestamps);
 
         } catch (err) {
-            console.error("Map Initialization Error:", err);
-            document.getElementById("error").innerText = "Map Error: " + err.message;
+            console.error("Map Error:", err);
         }
     });
 }
