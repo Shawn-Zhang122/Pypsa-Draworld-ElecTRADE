@@ -7,6 +7,7 @@
 import os
 import json
 from datetime import datetime
+import sys
 import pytz
 import pandas as pd
 import numpy as np
@@ -249,6 +250,8 @@ with open(index_path, "w") as f:
 # ============================================================
 nc_network_path = f"docs/out/network_{date_str}.nc"
 n.export_to_netcdf(nc_network_path)
+print("Exported solved network")
 
 print(f"--- All Processes Finished for {date_str} ---")
+sys.exit(0)
 
