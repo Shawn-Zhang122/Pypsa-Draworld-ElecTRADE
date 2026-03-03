@@ -5,7 +5,6 @@
     <title>Pypsa-China-ElecTRADE-Draworld, 2026 Version</title>
 
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet"/>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 
@@ -20,6 +19,7 @@
         h1 { margin-bottom: 5px; font-weight: 600; }
         .subtitle { margin-bottom: 20px; color: #666; font-size: 14px; }
 
+        /* Status Bar Style */
         .status-bar {
             background: #f8f9fa;
             border-left: 4px solid #2166ac;
@@ -44,33 +44,37 @@
 
         h2 { margin-top: 40px; color: #333; }
 
-        #priceMap, #provinceCurve, #meritChartContainer, #socChart {
+        /* Container Styles */
+        #priceMap, #provinceCurve {
+            height: 650px;
             background: white;
             border-radius: 8px;
             border: 1px solid #ddd;
             position: relative;
         }
 
-        #priceMap, #provinceCurve { height: 600px; }
-        #meritChart { height: 600px; width: 100%; }
-        #socChart { height: 500px; margin-top: 20px; }
-
-        .control-panel {
-            background: #f1f3f5;
-            padding: 15px;
+        #socChart {
+            height: 600px;
+            background: white;
             border-radius: 8px;
-            margin-bottom: 10px;
-            display: flex;
-            gap: 20px;
-            align-items: center;
+            border: 1px solid #ddd;
+            margin-top: 20px;
         }
 
         #error { color:red; margin-top:10px; font-weight: bold; }
 
         .map-credit {
-            position:absolute; bottom:8px; right:10px; font-size:11px;
-            background:rgba(255,255,255,0.85); padding:6px 8px;
-            border-radius:6px; line-height:1.4; pointer-events: none; z-index: 10;
+            position:absolute;
+            bottom:8px;
+            right:10px;
+            font-size:11px;
+            background:rgba(255,255,255,0.85);
+            padding:6px 8px;
+            border-radius:6px;
+            line-height:1.4;
+            box-shadow:0 0 4px rgba(0,0,0,0.15);
+            pointer-events: none;
+            z-index: 10;
         }
     </style>
 </head>
@@ -78,15 +82,17 @@
 
     <div class="status-bar">
         <span>
-            <strong style="color: #2166ac;">APP Status:</strong> 
+            <strong style="color: #2166ac;">System Status:</strong> 
             Automated 33-node Dispatch | 
             <span id="data-status" style="color: #666;">Syncing data...</span>
         </span>
         <div id="beijing-clock" class="time-chip">Loading Time...</div>
     </div>
 
-    <h1>China ElecTRADE — Daily Results (D-1) </h1>
-    <div class="subtitle">Rolling 48hour dispatch | 33-node zonal pricing | Merit-Order clearing</div>
+    <h1>China ElecTRADE — Daily Results (t+1) </h1>
+    <div class="subtitle">
+        Rolling 48h dispatch | 33-node zonal pricing | Automated publication
+    </div>
 
     <div style="display:flex; gap:30px;">
         <div style="flex:1;">
@@ -99,24 +105,6 @@
         </div>
     </div>
 
-    <h2>Nodal Merit Order & Market Clearing</h2>
-    <div class="control-panel">
-        <div>
-            <label><b>Province:</b></label>
-            <select id="merit-province-select" class="form-select" style="padding:5px;"></select>
-        </div>
-        <div>
-            <label><b>Hour:</b></label>
-            <select id="merit-hour-select" class="form-select" style="padding:5px;"></select>
-        </div>
-        <div style="font-size: 13px; color: #666;">
-            * Intersection shows local Marginal Clearing Price (MCP).
-        </div>
-    </div>
-    <div id="meritChartContainer">
-        <div id="meritChart"></div>
-    </div>
-
     <h2> Storage Status of Charge (SOC) by Tomorrow </h2>
     <div id="socChart"></div>
 
@@ -125,29 +113,47 @@
 <script>
 let mapInstance; 
 let hoverPopup;
-let meritDataRaw = [];
 
-/* ---------- Centroid Helper ---------- */
+/* ---------- Helper: Centroid to fix duplicate circles in MultiPoint ---------- */
 function getCentroid(feature) {
     const geom = feature.geometry;
-    let coords = geom.type === 'Point' ? [geom.coordinates] : 
-                 geom.type === 'MultiPoint' ? geom.coordinates :
-                 geom.type === 'Polygon' ? geom.coordinates[0] : geom.coordinates[0][0];
+    let coords = [];
+    
+    if (geom.type === 'Point') {
+        coords = [geom.coordinates];
+    } else if (geom.type === 'MultiPoint') {
+        coords = geom.coordinates;
+    } else if (geom.type === 'Polygon') {
+        coords = geom.coordinates[0];
+    } else if (geom.type === 'MultiPolygon') {
+        coords = geom.coordinates[0][0];
+    }
+
+    if (!coords || coords.length === 0) return [104, 35];
+
     let lon = 0, lat = 0;
-    coords.forEach(c => { lon += c[0]; lat += c[1]; });
+    coords.forEach(c => {
+        lon += c[0];
+        lat += c[1];
+    });
     return [lon / coords.length, lat / coords.length];
 }
 
-/* ---------- CSV Loader ---------- */
+/* ---------- CSV Loader (BOM SAFE) ---------- */
 async function loadCSV(url) {
     const res = await fetch(url);
+    if (!res.ok) throw new Error("File not found: " + url);
     const text = await res.text();
     const rows = text.trim().split("\n");
+    // Handle UTF-8 BOM
     const headers = rows[0].replace(/^\uFEFF/, "").split(",");
+    
     return rows.slice(1).map(row => {
         const values = row.split(",");
         const obj = {};
-        headers.forEach((h, i) => { obj[h.trim()] = values[i]?.trim(); });
+        headers.forEach((h, i) => {
+            obj[h.trim()] = values[i] ? values[i].trim() : null;
+        });
         return obj;
     });
 }
@@ -155,8 +161,7 @@ async function loadCSV(url) {
 /* ---------- MAIN APP LOGIC ---------- */
 async function loadApp() {
     try {
-
-     // Fetch Index
+        // Fetch Index
         const config = await fetch("out/index.json").then(r => r.json());
 
         // Update Metadata in Status Bar
@@ -166,115 +171,75 @@ async function loadApp() {
                                  `<span style="font-size:12px; color:#888;">(Cleared at: ${config.last_update})</span>`;
         }
 
-        // Load Price Data
-        const latestPriceFile = config.price_files[0];
+        // Process Price Files
+        const priceFiles = config.price_files.slice().sort((a, b) => b.localeCompare(a));
+        const latestPriceFile = priceFiles[0];
         const priceData = await loadCSV("out/prices/" + latestPriceFile);
-        const provinces = Object.keys(priceData[0]).filter(c => c !== "snapshot");
+
+        const columns = Object.keys(priceData[0]);
+        const provinces = columns.filter(c => 
+            c !== "snapshot" && 
+            !c.toLowerCase().includes("__battery") && 
+            !c.toLowerCase().includes("__pumped")
+        );
+
         const timestamps = priceData.map(d => d.snapshot);
 
-        // Map Averages
+        // Calculate Averages for Map
         let avgPrice = {};
         provinces.forEach(zone => {
             const vals = priceData.map(d => Number(d[zone])).filter(v => !isNaN(v));
-            avgPrice[zone] = vals.reduce((a, b) => a + b, 0) / vals.length;
+            avgPrice[zone] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
         });
 
+        // Initialize Map
         initMap(avgPrice, priceData, timestamps);
 
-        // Load Merit Order Data
-        const latestMeritFile = config.merit_files[0];
-        Papa.parse("out/merit/" + latestMeritFile, {
-            download: true, header: true, dynamicTyping: true,
-            complete: (results) => {
-                meritDataRaw = results.data;
-                initMeritSelectors();
-            }
-        });
-
-        // Load SOC Data
+        // Handle Storage SOC
         const socData = await loadCSV("out/" + config.soc_file);
         Plotly.newPlot("socChart", [{
             x: socData.map(d => d.name),
             y: socData.map(d => Number(Object.values(d)[1])),
-            type: "bar", marker: { color: '#2166ac' }
-        }], { title: "End of Day Storage SOC", margin: { b: 120 } });
+            type: "bar",
+            marker: { color: '#2166ac' }
+        }], {
+            title: `Storage SOC State (${latestPriceFile.replace('.csv','')})`,
+            xaxis: { title: "Storage Unit", tickfont: { size: 10 } },
+            yaxis: { title: "Energy (MWh)" },
+            margin: { b: 150, t: 50 }
+        });
 
     } catch (err) {
-        document.getElementById("error").innerText = "App Error: " + err.message;
+        const errorEl = document.getElementById("error");
+        if (errorEl) errorEl.innerText = "Application Error: " + err.message;
+        console.error(err);
     }
-}
-
-/* ---------- MERIT ORDER CHART ---------- */
-function initMeritSelectors() {
-    const pSelect = document.getElementById('merit-province-select');
-    const hSelect = document.getElementById('merit-hour-select');
-    
-    const provinces = [...new Set(meritDataRaw.map(d => d.bus))].sort();
-    const hours = [...new Set(meritDataRaw.map(d => d.snapshot))].sort();
-
-    provinces.forEach(p => pSelect.add(new Option(p, p)));
-    hours.forEach(h => hSelect.add(new Option(h, h)));
-
-    pSelect.value = "Guangdong";
-    hSelect.value = hours[0];
-
-    const update = () => drawMerit(pSelect.value, hSelect.value);
-    pSelect.onchange = update;
-    hSelect.onchange = update;
-    update();
-}
-
-function drawMerit(province, hour) {
-    let filtered = meritDataRaw.filter(d => d.bus === province && d.snapshot === hour);
-    filtered.sort((a, b) => a.cost - b.cost);
-    if (!filtered.length) return;
-
-    let cumulative = 0;
-    const colors = { Generator: "#1f77b4", Import: "#ff7f0e", StorageDischarge: "#9467bd", NetCongestion: "#d62728" };
-    
-    // Create Step Trace & Block Traces
-    const blockTraces = filtered.map(d => {
-        const start = cumulative;
-        cumulative += d.capacity;
-        return {
-            x: [start, start, cumulative, cumulative],
-            y: [0, d.cost, d.cost, 0],
-            fill: 'toself', fillcolor: colors[d.type] || '#7f7f7f',
-            line: { width: 0.5, color: 'white' },
-            name: d.type, text: `${d.label}<br>Cost: ${d.cost.toFixed(1)}<br>Cap: ${d.capacity.toFixed(0)}MW`,
-            hoverinfo: 'text', showlegend: false
-        };
-    });
-
-    const netDemand = filtered[0].net_demand;
-    const demandTrace = {
-        x: [netDemand, netDemand], y: [0, Math.max(...filtered.map(d=>d.cost)) * 1.2],
-        mode: 'lines', name: 'Local Demand + Exports + StorageCharge', line: { color: 'black', width: 3, dash: 'dash' }
-    };
-
-    // Add invisible Legend helper traces
-    const legendTraces = Object.entries(colors).map(([name, color]) => ({
-        x: [null], y: [null], mode: 'markers', marker: { color, symbol: 'square' }, name: name
-    }));
-
-    Plotly.newPlot('meritChart', [...blockTraces, demandTrace, ...legendTraces], {
-        title: `Merit Order: ${province} (${hour})`,
-        xaxis: { title: "Cumulative Resource Supply (MW)" },
-        yaxis: { title: "D-1 Price (RMB/MWh)" },
-        hovermode: 'closest'
-    });
 }
 
 /* ---------- MAP COMPONENT ---------- */
 function initMap(avgPrice, data, timestamps) {
     mapInstance = new maplibregl.Map({
         container: 'priceMap',
-        // style: {
-        //     version: 8,
-        //     sources: {},
-        //     layers: []
-        // },
-        style: "https://demotiles.maplibre.org/style.json",
+        style: {
+            version: 8,
+            glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+            sources: {
+                'carto-bg': {
+                    type: 'raster',
+                    tiles: ['https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                    attribution: '© OpenStreetMap contributors © CARTO'
+                }
+            },
+            layers: [
+                {
+                    id: 'background',
+                    type: 'raster',
+                    source: 'carto-bg',
+                    paint: { 'raster-opacity': 1 }
+                }
+            ]
+        },
         center: [105, 37],
         zoom: 3.8
     });
@@ -304,16 +269,6 @@ function initMap(avgPrice, data, timestamps) {
             });
 
             // --- LAYER 1: Province Borders (Using High Contrast) ---
-            mapInstance.addLayer({
-                id: 'province-fill',
-                type: 'fill',
-                source: 'provinces',
-                paint: {
-                    'fill-color': '#ffffff',
-                    'fill-opacity': 0.15
-                }
-            });
-
             mapInstance.addLayer({
                 'id': 'province-borders',
                 'type': 'line',
@@ -355,10 +310,15 @@ function initMap(avgPrice, data, timestamps) {
                 paint: { 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
             });
 
+            // Ensure borders are not hidden by the background style
+            if (mapInstance.getLayer('province-borders')) {
+                mapInstance.moveLayer('province-borders'); 
+            }
+
             // Watermark and Interactions
             const credit = document.createElement("div");
             credit.className = "map-credit";
-            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA <br> Map @ MapLibre`;
+            credit.innerHTML = `ElecTRADE @ Draworld, Beijing<br>Optimization @ PyPSA | Map @ MapLibre`;
             document.getElementById("priceMap").appendChild(credit);
 
             hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
@@ -389,12 +349,22 @@ function initMap(avgPrice, data, timestamps) {
     });
 }
 
+/* ---------- CHART COMPONENT ---------- */
 function showProvinceCurve(zone, data, timestamps) {
     Plotly.newPlot("provinceCurve", [{
-        x: timestamps, y: data.map(d => Number(d[zone])),
-        mode: "lines+markers", line: { color: '#b2182b' }
-    }], { title: `Price Profile: ${zone}` });
-    document.getElementById("curveTitle").innerText = "Price Profile - Node" + zone;
+        x: timestamps,
+        y: data.map(d => Number(d[zone])),
+        mode: "lines+markers",
+        name: zone,
+        line: { color: '#b2182b', width: 2 },
+        marker: { size: 4 }
+    }], {
+        title: `Day-ahead Price Profile: ${zone}`,
+        xaxis: { title: "Time" },
+        yaxis: { title: "Price (RMB/MWh)" },
+        margin: { t: 50, b: 50, l: 60, r: 30 }
+    });
+    document.getElementById("curveTitle").innerText = "Hourly Price — " + zone;
 }
 
 /* ---------- REAL-TIME CLOCK ---------- */
@@ -421,8 +391,10 @@ function updateBeijingTime() {
     setTimeout(updateBeijingTime, 60000); 
 }
 
+// Kickoff
 updateBeijingTime();
 loadApp();
 </script>
+
 </body>
 </html>
