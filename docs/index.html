@@ -78,15 +78,15 @@
 
     <div class="status-bar">
         <span>
-            <strong style="color: #2166ac;">System Status:</strong> 
+            <strong style="color: #2166ac;">APP Status:</strong> 
             Automated 33-node Dispatch | 
             <span id="data-status" style="color: #666;">Syncing data...</span>
         </span>
         <div id="beijing-clock" class="time-chip">Loading Time...</div>
     </div>
 
-    <h1>China ElecTRADE — Daily Results (t+1) </h1>
-    <div class="subtitle">Rolling 48h dispatch | 33-node zonal pricing | Merit Order clearing</div>
+    <h1>China ElecTRADE — Daily Results (D-1) </h1>
+    <div class="subtitle">Rolling 48hour dispatch | 33-node zonal pricing | Merit-Order clearing</div>
 
     <div style="display:flex; gap:30px;">
         <div style="flex:1;">
@@ -230,7 +230,7 @@ function drawMerit(province, hour) {
     if (!filtered.length) return;
 
     let cumulative = 0;
-    const colors = { Generator: "#1f77b4", Import: "#ff7f0e", Storage: "#9467bd", Congestion: "#d62728" };
+    const colors = { Generator: "#1f77b4", Import: "#ff7f0e", StorageDischarge: "#9467bd", NetCongestion: "#d62728" };
     
     // Create Step Trace & Block Traces
     const blockTraces = filtered.map(d => {
@@ -249,7 +249,7 @@ function drawMerit(province, hour) {
     const netDemand = filtered[0].net_demand;
     const demandTrace = {
         x: [netDemand, netDemand], y: [0, Math.max(...filtered.map(d=>d.cost)) * 1.2],
-        mode: 'lines', name: 'Total Demand', line: { color: 'black', width: 3, dash: 'dash' }
+        mode: 'lines', name: 'Local Demand + Exports + StorageCharge', line: { color: 'black', width: 3, dash: 'dash' }
     };
 
     // Add invisible Legend helper traces
@@ -259,8 +259,8 @@ function drawMerit(province, hour) {
 
     Plotly.newPlot('meritChart', [...blockTraces, demandTrace, ...legendTraces], {
         title: `Merit Order: ${province} (${hour})`,
-        xaxis: { title: "Cumulative Supply (MW)" },
-        yaxis: { title: "Day-ahead Price (RMB/MWh)" },
+        xaxis: { title: "Cumulative Resource Supply (MW)" },
+        yaxis: { title: "D-1 Price (RMB/MWh)" },
         hovermode: 'closest'
     });
 }
@@ -394,7 +394,7 @@ function showProvinceCurve(zone, data, timestamps) {
         x: timestamps, y: data.map(d => Number(d[zone])),
         mode: "lines+markers", line: { color: '#b2182b' }
     }], { title: `Price Profile: ${zone}` });
-    document.getElementById("curveTitle").innerText = "Price Profile — " + zone;
+    document.getElementById("curveTitle").innerText = "Price Profile - Node" + zone;
 }
 
 /* ---------- REAL-TIME CLOCK ---------- */
