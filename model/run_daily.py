@@ -248,10 +248,19 @@ with open(index_path, "w") as f:
 # ============================================================
 # Full Network Export (.nc)
 # ============================================================
+finish_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+# Export Network
 nc_network_path = f"docs/out/network_{date_str}.nc"
 n.export_to_netcdf(nc_network_path)
-print("Exported solved network")
 
-print(f"--- All Processes Finished for {date_str} ---")
+# Print clean status for cron.log
+print(f"\n" + "="*50)
+print(f"SUCCESS: Optimization & Export Complete")
+print(f"Delivery Date : {date_str}")
+print(f"Solved At     : {finish_time}")
+print(f"Network Saved : {nc_network_path}")
+print("="*50 + "\n")
+
 sys.exit(0)
+
 
