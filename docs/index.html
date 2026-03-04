@@ -163,7 +163,7 @@ async function loadApp() {
         if (config.last_update && config.delivery_date) {
             const statusEl = document.getElementById('data-status');
             statusEl.innerHTML = `Latest Results: <b style="color:#b2182b;">${config.delivery_date}</b> ` +
-                                 `<span style="font-size:12px; color:#888;">(Cleared at: ${config.last_update})</span>`;
+                                 `<span style="font-size:12px; color:#888;">(Beijing Time Cleared at: ${config.last_update})</span>`;
         }
 
         // Load Price Data
@@ -415,7 +415,7 @@ function updateBeijingTime() {
         minute: '2-digit' 
     });
 
-    document.getElementById('beijing-clock').innerText = `Current Beijing Time: ${datePart} (${weekDay}) ${timePart}`;
+    document.getElementById('beijing-clock').innerText = `Current: ${datePart} (${weekDay}) ${timePart}`;
     
     // Update every minute (60,000 milliseconds)
     setTimeout(updateBeijingTime, 60000); 
