@@ -394,7 +394,7 @@ function showProvinceCurve(zone, data, timestamps) {
         x: timestamps, y: data.map(d => Number(d[zone])),
         mode: "lines+markers", line: { color: '#b2182b' }
     }], { title: `Price Profile: ${zone}` });
-    document.getElementById("curveTitle").innerText = "Price Profile - Node" + zone;
+    document.getElementById("curveTitle").innerText = "Price Profile - Node - " + zone;
 }
 
 /* ---------- REAL-TIME CLOCK ---------- */
