@@ -257,10 +257,12 @@ n.export_to_netcdf(nc_network_path)
 print(f"\n" + "="*50)
 print(f"SUCCESS: Optimization & Export Complete")
 print(f"Delivery Date : {date_str}")
-print(f"Solved At     : {finish_time}")
+print(f"Solved At Beijing : {finish_time}")
 print(f"Network Saved : {nc_network_path}")
 print("="*50 + "\n")
 
 sys.exit(0)
+
+
 
 
