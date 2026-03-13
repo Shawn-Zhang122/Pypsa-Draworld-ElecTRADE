@@ -258,11 +258,10 @@ print(f"\n" + "="*50)
 print(f"SUCCESS: Optimization & Export Complete")
 print(f"Delivery Date : {date_str}")
 print(f"Solved At (Beijing Time)    : {finish_time}")
-print(f"Network Saved : {nc_network_path}")
+print(f"Pypsa-Draworld-ElecTRADENetwork Saved : {nc_network_path}")
 print("="*50 + "\n")
 
 sys.exit(0)
-
 
 
 
